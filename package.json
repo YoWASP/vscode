@@ -30,18 +30,21 @@
             "title": "YoWASP Toolchain",
             "properties": {
                 "yowaspToolchain.baseURL": {
+                    "scope": "application",
                     "type": "string",
                     "default": "https://cdn.jsdelivr.net/npm/",
                     "description": "Base URL to use for toolchain bundles. This is usually pointing to a CDN delivering NPM packages."
                 },
                 "yowaspToolchain.bundles": {
+                    "scope": "application",
                     "type": "array",
                     "items": {
                         "type": "string"
                     },
                     "default": [
-                        "@yowasp/yosys@latest/gen/bundle-browser.js",
-                        "@yowasp/nextpnr-ice40@latest/gen/bundle-browser.js"
+                        "@yowasp/yosys",
+                        "@yowasp/nextpnr-ice40",
+                        "@yowasp/nextpnr-ecp5"
                     ],
                     "markdownDescription": "URLs, or URL fragments relative to `yowaspToolchain.baseURL`, pointing to the entry point of a compiled YoWASP toolchain bundles. This is usually a list of `@yowasp/*/gen/bundle-browser.js` path fragments.\n\nEach bundle can provide one or more commands. All of the bundles (< 1 MB each) are loaded at the beginning of the build to locate the commands, but the bundle resources (10s to 100s of MB) are loaded only when necessary to run a command. If multiple bundles provide the same command, the first one is used."
                 },

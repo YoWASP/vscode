@@ -3,7 +3,7 @@ import type * as yowasp from '@yowasp/runtime';
 
 interface LoadBundlesMessage {
     type: 'loadBundles';
-    urls: (string | URL)[];
+    urls: string[];
 }
 
 interface RunCommandMessage {
@@ -26,7 +26,7 @@ interface DiagnosticMessage {
 
 interface BundlesLoadedMessage {
     type: 'bundlesLoaded';
-    urls: (string | URL)[];
+    urls: string[];
 }
 
 interface TerminalOutputMessage {
@@ -62,17 +62,33 @@ function workerEntryPoint() {
 
     async function loadBundles(message: LoadBundlesMessage) {
         const bundleURLsLoaded = [];
-        for (const bundleURL of message.urls) {
+        for (let bundleURL of message.urls) {
+            if (!bundleURL.endsWith('/'))
+                bundleURL += '/';
+
+            let packageJSON;
+            try {
+                const packageJSONURL = new URL('./package.json', bundleURL);
+                console.log(`[YoWASP toolchain] Loading metadata from ${packageJSONURL}`);
+                packageJSON = await fetch(packageJSONURL).then((resp) => resp.json());
+            } catch (e) {
+                postDiagnostic(Severity.error,
+                    `Cannot fetch package metadata for bundle ${bundleURL}: ${e}`);
+                continue;
+            }
+
             let bundleNS: {
                 commands: { [name: string]: yowasp.Application['run'] },
                 // eslint-disable-next-line @typescript-eslint/naming-convention
                 Exit: any
             };
             try {
-                bundleNS = await import(bundleURL.toString());
-            } catch(e) {
+                const entryPointURL = new URL(packageJSON["exports"]["browser"], bundleURL);
+                console.log(`[YoWASP toolchain] Importing entry point from ${entryPointURL}`);
+                bundleNS = await import(entryPointURL.toString());
+            } catch (e) {
                 postDiagnostic(Severity.error,
-                    `Cannot load bundle ${bundleURL}: ${e}`);
+                    `Cannot import entry point for bundle ${bundleURL}: ${e}`);
                 continue;
             }
 
@@ -118,7 +134,7 @@ function workerEntryPoint() {
                 }
             });
             postMessage({ type: 'commandDone', code: 0, files: files });
-        } catch(e) {
+        } catch (e) {
             if (e instanceof bundle.exitError) {
                 // @ts-ignore
                 postMessage({ type: 'commandDone', code: e.code, files: e.files });
@@ -172,7 +188,9 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
     open(_initialDimensions: vscode.TerminalDimensions | undefined): void {
         const configuration = vscode.workspace.getConfiguration('yowaspToolchain');
-        const baseURL = new URL(configuration.baseURL);
+        let baseURL = configuration.baseURL;
+        if (!baseURL.endsWith('/'))
+            baseURL += '/';
         const bundleURLs = configuration.bundles.map((bundleURLFragment: string) =>
             new URL(bundleURLFragment, baseURL).toString());
 
@@ -224,7 +242,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     }
 
     private async finishCommand(exitCode: number, outputTree: yowasp.Tree) {
-        this.extractOutputFiles(outputTree);
+        await this.extractOutputFiles(outputTree);
         if (exitCode === 0 && this.scriptPosition + 1 < this.script.length) {
             // Run next command
             this.scriptPosition += 1;
@@ -246,7 +264,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
                 try {
                     data = await vscode.workspace.fs.readFile(fileUri);
                     console.log(`[YoWASP toolchain] Read input file ${arg} at ${fileUri}`);
-                } catch(e) {
+                } catch (e) {
                     continue;
                 }
                 let segmentIdx = -1;
