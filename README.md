@@ -16,11 +16,11 @@ After adding the [extension][] to VS Code, open workspace settings as JSON and a
 
 ```json
 {
-  "yowaspToolchain.buildCommands": [
-    ["yosys", "top.v", "-p", "synth_ice40", "-o", "top.json"],
-    ["nextpnr-ice40", "--hx8k", "--json", "top.json", "--asc", "top.asc"],
-    ["icepack", "top.asc", "top.bin"]
-  ]
+    "yowaspToolchain.buildCommands": [
+        ["yosys", "top.v", "-p", "synth_ice40", "-o", "top.json"],
+        ["nextpnr-ice40", "--hx8k", "--json", "top.json", "--asc", "top.asc"],
+        ["icepack", "top.asc", "top.bin"]
+    ]
 }
 ```
 
