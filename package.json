@@ -1,0 +1,112 @@
+{
+    "publisher": "yowasp",
+    "name": "toolchain",
+    "displayName": "YoWASP Toolchain",
+    "description": "YoWASP toolchain for Visual Studio Code",
+    "author": "Catherine <whitequark@whitequark.org>",
+    "license": "ISC",
+    "homepage": "https://yowasp.org/",
+    "version": "0.1.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/YoWASP/vscode.git"
+    },
+    "engines": {
+        "vscode": "^1.82.0"
+    },
+    "extensionKind": ["ui"],
+    "categories": [
+        "Programming Languages"
+    ],
+    "activationEvents": [
+        "onCommand:workbench.action.tasks.runTask"
+    ],
+    "type": "module",
+    "browser": "./out/web/extension.js",
+    "contributes": {
+        "configuration": {
+            "id": "yowaspToolchain",
+            "type": "object",
+            "title": "YoWASP Toolchain",
+            "properties": {
+                "yowaspToolchain.baseURL": {
+                    "type": "string",
+                    "default": "https://cdn.jsdelivr.net/npm/",
+                    "description": "Base URL to use for toolchain bundles. This is usually pointing to a CDN delivering NPM packages."
+                },
+                "yowaspToolchain.bundles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "@yowasp/yosys@latest/gen/bundle-browser.js",
+                        "@yowasp/nextpnr-ice40@latest/gen/bundle-browser.js"
+                    ],
+                    "markdownDescription": "URLs, or URL fragments relative to `yowaspToolchain.baseURL`, pointing to the entry point of a compiled YoWASP toolchain bundles. This is usually a list of `@yowasp/*/gen/bundle-browser.js` path fragments.\n\nEach bundle can provide one or more commands. All of the bundles (< 1 MB each) are loaded at the beginning of the build to locate the commands, but the bundle resources (10s to 100s of MB) are loaded only when necessary to run a command. If multiple bundles provide the same command, the first one is used."
+                },
+                "yowaspToolchain.buildCommands": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 1
+                    },
+                    "minItems": 1,
+                    "markdownDescription": "The sequence of commands to be executed by the \"YoWASP Toolchain: Run Build...\" command.\n\nEach command is an array where the first element specifies the command to run, and the rest specify its arguments. Input or output files must appear as their own argument and not be concatenated with an option.\n\nE.g.:\n```\n[\n  [\"yosys\", \"top.v\", \"-p\", \"synth_ice40\", \"-o\", \"top.json\"],\n  [\"nextpnr-ice40\", \"--hx8k\", \"--package\", \"ct256\", \"--json\", \"top.json\", \"--asc\", \"top.asc\"]\n]\n```\n."
+                }
+            }
+        },
+        "commands": [
+            {
+                "command": "yowasp.toolchain.runBuild",
+                "title": "YoWASP Toolchain: Run Build..."
+            },
+            {
+                "command": "yowasp.toolchain.runCommand",
+                "title": "YoWASP Toolchain: Run Command..."
+            }
+        ],
+        "taskDefinitions": [
+            {
+                "type": "yowasp",
+                "required": [
+                    "commands"
+                ],
+                "properties": {
+                    "commands": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "minItems": 1
+                        },
+                        "minItems": 1,
+                        "description": "The sequence of commands to execute. Each command is an array where the first element specifies the command to run, and the rest specify its arguments. Input or output files must appear as their own argument and not be concatenated with an option. E.g. `[[\"yosys\", \"top.v\", \"-p\", \"synth_ice40\", \"-o\", \"top.json\"], [\"nextpnr-ice40\", \"--hx8k\", \"--package\", \"ct256\", \"--json\", \"top.json\", \"--asc\", \"top.asc\"]]."
+                    }
+                }
+            }
+        ]
+    },
+    "scripts": {
+        "lint": "eslint src --ext ts",
+        "esbuild": "esbuild ./src/web/extension.ts --bundle --outfile=out/web/extension.js --external:vscode --format=cjs  --sourcemap",
+        "esbuild-watch": "npm run esbuild -- --watch",
+        "vscode:prepublish": "npm run esbuild -- --minify",
+        "browser": "vscode-test-web --extensionDevelopmentPath=. ."
+    },
+    "devDependencies": {
+        "@yowasp/runtime": "5.0.23",
+        "typescript": "^5.3.2",
+        "@types/vscode": "^1.82.0",
+        "eslint": "^8.54.0",
+        "@typescript-eslint/parser": "^6.13.1",
+        "@typescript-eslint/eslint-plugin": "^6.13.1",
+        "@vscode/test-web": "^0.0.22",
+        "esbuild": "^0.19.9"
+    }
+}
