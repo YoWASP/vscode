@@ -6,7 +6,7 @@
     "author": "Catherine <whitequark@whitequark.org>",
     "license": "ISC",
     "homepage": "https://yowasp.org/",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "repository": {
         "type": "git",
         "url": "https://github.com/YoWASP/vscode.git"
@@ -64,8 +64,8 @@
         },
         "commands": [
             {
-                "command": "yowasp.toolchain.runBuild",
-                "title": "YoWASP Toolchain: Run Build..."
+                "command": "yowasp.toolchain.build",
+                "title": "YoWASP Toolchain: Build..."
             },
             {
                 "command": "yowasp.toolchain.runCommand",

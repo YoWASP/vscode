@@ -376,7 +376,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.runBuild', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.build', async () => {
         const configuration = vscode.workspace.getConfiguration('yowaspToolchain');
         if (configuration.buildCommands === undefined || configuration.buildCommands.length === 0) {
             // eslint-disable-next-line @typescript-eslint/naming-convention

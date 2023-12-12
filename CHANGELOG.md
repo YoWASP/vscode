@@ -6,6 +6,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 - Added extraction of bundle entry point via package.json
 - Fixed a race condition in file input/output
+- Renamed "YoWASP Toolchain: Run Build..." to "YoWASP Toolchain: Build..."
 
 ## 0.1.0
 
