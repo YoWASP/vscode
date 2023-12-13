@@ -399,14 +399,18 @@ export function activate(context: vscode.ExtensionContext) {
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.runCommand', async () => {
+        const LEX_RE = /\s*(?<uq>[^'"\s][^\s]*)|\s*'(?<sq>([^']|'[^\s])+)'|\s*"(?<dq>([^"]|"[^\s])+)"/g;
         const commandLine = await vscode.window.showInputBox({
             prompt: 'Enter a command line',
             placeHolder: 'yosys --version'
         });
         if (commandLine !== undefined) {
+            const lexems = [];
+            for (const match of commandLine.matchAll(LEX_RE))
+                lexems.push(match.groups?.uq || match.groups?.sq || match.groups?.dq || '<undefined>');
             const terminal = vscode.window.createTerminal({
                 name: 'YoWASP',
-                pty: new WorkerPseudioterminal([commandLine.split(/\s+/)], /*waitOnceDone=*/true),
+                pty: new WorkerPseudioterminal([lexems], /*waitOnceDone=*/true),
                 isTransient: true
             });
             terminal.show();
