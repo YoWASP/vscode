@@ -65,11 +65,13 @@
         "commands": [
             {
                 "command": "yowasp.toolchain.build",
-                "title": "YoWASP Toolchain: Build..."
+                "category": "YoWASP Toolchain",
+                "title": "Build..."
             },
             {
                 "command": "yowasp.toolchain.runCommand",
-                "title": "YoWASP Toolchain: Run Command..."
+                "category": "YoWASP Toolchain",
+                "title": "Run Command..."
             }
         ],
         "taskDefinitions": [
