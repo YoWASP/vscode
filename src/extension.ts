@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { WorkerContext, WorkerThread, WorkerThreadImpl } from './worker_thread';
 import type * as yowasp from '@yowasp/runtime';
 
 interface LoadBundlesMessage {
@@ -44,9 +45,9 @@ type HostToWorkerMessage = LoadBundlesMessage | RunCommandMessage;
 
 type WorkerToHostMessage = BundlesLoadedMessage | DiagnosticMessage | TerminalOutputMessage | CommandDoneMessage;
 
-function workerEntryPoint() {
+function workerEntryPoint(self: WorkerContext) {
     function postDiagnostic(severity: Severity, message: string) {
-        postMessage({
+        self.postMessage({
             type: 'diagnostic',
             severity: severity,
             message: message
@@ -85,7 +86,7 @@ function workerEntryPoint() {
             try {
                 const entryPointURL = new URL(packageJSON["exports"]["browser"], bundleURL);
                 console.log(`[YoWASP toolchain] Importing entry point from ${entryPointURL}`);
-                bundleNS = await import(entryPointURL.toString());
+                bundleNS = await self.importModule(entryPointURL);
             } catch (e) {
                 postDiagnostic(Severity.error,
                     `Cannot import entry point for bundle ${bundleURL}: ${e}`);
@@ -106,7 +107,7 @@ function workerEntryPoint() {
             bundles.push({ commands, exitError: bundleNS.Exit });
             bundleURLsLoaded.push(bundleURL);
         }
-        postMessage({
+        self.postMessage({
             type: 'bundlesLoaded',
             urls: bundleURLsLoaded
         });
@@ -121,7 +122,7 @@ function workerEntryPoint() {
         if (bundle === undefined || command === undefined) {
             postDiagnostic(Severity.error,
                 `Cannot run '${argv0}': Command not found in any of the loaded bundles`);
-            postMessage({ type: 'commandDone', code: 255, files: {} });
+            self.postMessage({ type: 'commandDone', code: 255, files: {} });
             return;
         }
 
@@ -130,14 +131,14 @@ function workerEntryPoint() {
             files = await command(args, message.files, {
                 decodeASCII: false,
                 printLine(line: string) {
-                    postMessage({ type: 'terminalOutput', line });
+                    self.postMessage({ type: 'terminalOutput', line });
                 }
             });
-            postMessage({ type: 'commandDone', code: 0, files: files });
+            self.postMessage({ type: 'commandDone', code: 0, files: files });
         } catch (e) {
             if (e instanceof bundle.exitError) {
                 // @ts-ignore
-                postMessage({ type: 'commandDone', code: e.code, files: e.files });
+                self.postMessage({ type: 'commandDone', code: e.code, files: e.files });
             } else {
                 postDiagnostic(Severity.error,
                     `Command '${message.command.join(' ')}' failed to run: ${e}`);
@@ -145,22 +146,17 @@ function workerEntryPoint() {
         }
     }
 
-    self.onmessage = function(event: MessageEvent<HostToWorkerMessage>) {
-        switch (event.data.type) {
+    self.processMessage = function(message: HostToWorkerMessage) {
+        switch (message.type) {
             case 'loadBundles':
-                loadBundles(event.data);
+                loadBundles(message);
                 break;
             case 'runCommand':
-                runCommand(event.data);
+                runCommand(message);
                 break;
         }
     };
 }
-
-const workerURL = URL.createObjectURL(new Blob(
-    [`(${workerEntryPoint.toString()})();`],
-    {type: "application/javascript"}
-));
 
 class WorkerPseudioterminal implements vscode.Pseudoterminal {
     private writeEmitter = new vscode.EventEmitter<string>();
@@ -172,7 +168,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
     private statusBarItem: vscode.StatusBarItem;
 
-    private worker: Worker;
+    private worker: WorkerThread;
     private scriptPosition: number = 0;
     private closeOnInput: boolean = false;
 
@@ -181,9 +177,8 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.statusBarItem.name = 'YoWASP Toolchain';
         this.statusBarItem.tooltip = this.statusBarItem.name;
 
-        this.worker = new Worker(workerURL);
-        this.worker.addEventListener('message', (event: MessageEvent<WorkerToHostMessage>) =>
-            this.handleMessage(event.data));
+        this.worker = new WorkerThreadImpl(workerEntryPoint);
+        this.worker.processMessage = this.processMessage.bind(this);
     }
 
     open(_initialDimensions: vscode.TerminalDimensions | undefined): void {
@@ -209,7 +204,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.worker.terminate();
     }
 
-    private handleMessage(message: WorkerToHostMessage) {
+    private processMessage(message: WorkerToHostMessage) {
         switch (message.type) {
             case 'diagnostic':
                 this.showDiagnosticMessage(message);
@@ -262,7 +257,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
                 const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, arg);
                 let data;
                 try {
-                    data = await vscode.workspace.fs.readFile(fileUri);
+                    data = new Uint8Array(await vscode.workspace.fs.readFile(fileUri));
                     console.log(`[YoWASP toolchain] Read input file ${arg} at ${fileUri}`);
                 } catch (e) {
                     continue;

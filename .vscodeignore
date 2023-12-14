@@ -9,3 +9,4 @@ node_modules/**
 **/*.map
 **/*.ts
 **/.vscode-test.*
+demo.gif
