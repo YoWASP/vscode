@@ -2,7 +2,7 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
-## 0.1.2 (unreleased)
+## 0.1.2
 
 - Improved lexing in "Run Command..." prompt to handle quotes and whitespace like a shell
 - Added compatibility with desktop VS Code
