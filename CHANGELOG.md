@@ -6,6 +6,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 - Improved lexing in "Run Command..." prompt to handle quotes and whitespace like a shell
 - Added compatibility with desktop VS Code
+- Only run one build process at a time when using the "Build..." command
 
 ## 0.1.1
 

@@ -381,15 +381,13 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.commands.executeCommand('workbench.action.openSettings', 'yowaspToolchain.buildCommands');
             }
         } else {
-            if (buildTerminal)
-                buildTerminal.dispose();
-
-            const terminal = vscode.window.createTerminal({
+            buildTerminal?.dispose();
+            buildTerminal = vscode.window.createTerminal({
                 name: 'YoWASP',
                 pty: new WorkerPseudioterminal(configuration.buildCommands, /*waitOnceDone=*/true),
                 isTransient: true
             });
-            terminal.show(/*preserveFocus=*/true);
+            buildTerminal.show(/*preserveFocus=*/true);
         }
     }));
 
