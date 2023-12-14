@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.1.3 (unreleased)
+
+- None yet
+
 ## 0.1.2
 
 - Improved lexing in "Run Command..." prompt to handle quotes and whitespace like a shell
