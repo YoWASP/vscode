@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { WorkerContext, WorkerThread, WorkerThreadImpl } from './worker_thread';
+import { WorkerContext, WorkerThread, WorkerThreadImpl } from './workerThread';
 import type * as yowasp from '@yowasp/runtime';
 
 interface LoadBundlesMessage {
