@@ -81,7 +81,7 @@ if (USE_WEB_WORKERS) {
                 async function importModuleCriminally(url: URL | string): Promise<any> {
                     let code = await fetch(url).then((resp) => resp.text());
                     code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(url));
-                    code = code.replace(/\bawait import\b/, 'await _import');
+                    code = code.replace(/\bawait import\b/g, 'await _import');
                     code = code.replace(/\bexport const\b/g, 'exports.');
                     code = code.replace(/\bexport\b/g, 'exports = ');
                     const script = new vm.Script(code, {
