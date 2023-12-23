@@ -61,55 +61,57 @@ function workerEntryPoint(self: WorkerContext) {
 
     const bundles: Bundle[] = [];
 
-    async function loadBundles(message: LoadBundlesMessage) {
-        const bundleURLsLoaded = [];
-        for (let bundleURL of message.urls) {
-            if (!bundleURL.endsWith('/'))
-                bundleURL += '/';
+    async function loadBundleFromURL(url: string, urlsLoaded: string[]) {
+        if (!url.endsWith('/'))
+            url += '/';
 
-            let packageJSON;
-            try {
-                const packageJSONURL = new URL('./package.json', bundleURL);
-                console.log(`[YoWASP toolchain] Loading metadata from ${packageJSONURL}`);
-                packageJSON = await fetch(packageJSONURL).then((resp) => resp.json());
-            } catch (e) {
-                postDiagnostic(Severity.error,
-                    `Cannot fetch package metadata for bundle ${bundleURL}: ${e}`);
-                continue;
-            }
-
-            let bundleNS: {
-                commands: { [name: string]: yowasp.Application['run'] },
-                // eslint-disable-next-line @typescript-eslint/naming-convention
-                Exit: any
-            };
-            try {
-                const entryPointURL = new URL(packageJSON["exports"]["browser"], bundleURL);
-                console.log(`[YoWASP toolchain] Importing entry point from ${entryPointURL}`);
-                bundleNS = await self.importModule(entryPointURL);
-            } catch (e) {
-                postDiagnostic(Severity.error,
-                    `Cannot import entry point for bundle ${bundleURL}: ${e}`);
-                continue;
-            }
-
-            if (typeof bundleNS.commands !== "object" || !(bundleNS.Exit.prototype instanceof Error)) {
-                postDiagnostic(Severity.error,
-                    `Bundle ${bundleURL} does not define any commands`);
-                continue;
-            }
-
-            const commands = new Map();
-            for (const [command, runFn] of Object.entries(bundleNS.commands)) {
-                console.log(`[YoWASP toolchain] Command '${command}' defined in bundle ${bundleURL}`);
-                commands.set(command, runFn);
-            }
-            bundles.push({ commands, exitError: bundleNS.Exit });
-            bundleURLsLoaded.push(bundleURL);
+        let packageJSON;
+        try {
+            const packageJSONURL = new URL('./package.json', url);
+            console.log(`[YoWASP toolchain] Loading metadata from ${packageJSONURL}`);
+            packageJSON = await fetch(packageJSONURL).then((resp) => resp.json());
+        } catch (e) {
+            postDiagnostic(Severity.error,
+                `Cannot fetch package metadata for bundle ${url}: ${e}`);
+            return;
         }
+
+        let bundleNS: {
+            commands: { [name: string]: yowasp.Application['run'] },
+            // eslint-disable-next-line @typescript-eslint/naming-convention
+            Exit: any
+        };
+        try {
+            const entryPointURL = new URL(packageJSON["exports"]["browser"], url);
+            console.log(`[YoWASP toolchain] Importing entry point from ${entryPointURL}`);
+            bundleNS = await self.importModule(entryPointURL);
+        } catch (e) {
+            postDiagnostic(Severity.error,
+                `Cannot import entry point for bundle ${url}: ${e}`);
+            return;
+        }
+
+        if (typeof bundleNS.commands !== "object" || !(bundleNS.Exit.prototype instanceof Error)) {
+            postDiagnostic(Severity.error,
+                `Bundle ${url} does not define any commands`);
+            return;
+        }
+
+        const commands = new Map();
+        for (const [command, runFn] of Object.entries(bundleNS.commands)) {
+            console.log(`[YoWASP toolchain] Command '${command}' defined in bundle ${url}`);
+            commands.set(command, runFn);
+        }
+        bundles.push({ commands, exitError: bundleNS.Exit });
+        urlsLoaded.push(url);
+    }
+
+    async function loadBundles(message: LoadBundlesMessage) {
+        const urlsLoaded: string[] = [];
+        await Promise.all(message.urls.map((url) => loadBundleFromURL(url, urlsLoaded)));
         self.postMessage({
             type: 'bundlesLoaded',
-            urls: bundleURLsLoaded
+            urls: urlsLoaded
         });
     }
 
