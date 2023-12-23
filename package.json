@@ -30,13 +30,11 @@
             "title": "YoWASP Toolchain",
             "properties": {
                 "yowaspToolchain.baseURL": {
-                    "scope": "application",
                     "type": "string",
                     "default": "https://cdn.jsdelivr.net/npm/",
                     "description": "Base URL to use for toolchain bundles. This is usually pointing to a CDN delivering NPM packages."
                 },
                 "yowaspToolchain.bundles": {
-                    "scope": "application",
                     "type": "array",
                     "items": {
                         "type": "string"
