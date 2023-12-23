@@ -7,6 +7,13 @@ declare var navigator: undefined | {
     }
 };
 
+type PackageJSON = {
+    publisher?: string;
+    name: string;
+    version: string;
+    exports: { [name: string]: string };
+};
+
 type Tree = {
     [name: string]: Tree | string | Uint8Array
 };
@@ -116,7 +123,7 @@ function workerEntryPoint(self: WorkerContext) {
         if (!url.endsWith('/'))
             url += '/';
 
-        let packageJSON;
+        let packageJSON: PackageJSON;
         try {
             const packageJSONURL = new URL('./package.json', url);
             console.log(`[YoWASP toolchain] Loading metadata from ${packageJSONURL}`);
@@ -125,6 +132,47 @@ function workerEntryPoint(self: WorkerContext) {
             postDiagnostic(Severity.error,
                 `Cannot fetch package metadata for bundle ${url}: ${e}.`);
             return;
+        }
+
+        // If a bundle contains two files, /package.json and /gen/bundle.js, and the following
+        // sequence happens:
+        //  1. /package.json is requested and cached
+        //  2. the bundle contents is updated
+        //  3. /gen/bundle.js is requested and cached
+        // then the bundle will have "tearing" (by analogy to display tearing): downloaded
+        // resources will be partly old and partly new. This happens because there is no way
+        // to invalidate all of the caches in the middle (CDN, browser, etc).
+        //
+        // CDNs offer a way to solve this: in addition to the /@yowasp/yosys/package.json endpoint,
+        // which makes the latest version available, they also provide a version-specific endpoint,
+        // typically /@yowasp/yosys@1.2.3/package.json. The contents of the latter never change.
+        // Not every CDN does this, so we only use this opportunistically: if ..@1.2.3/package.json
+        // serves valid JSON with the same package name.
+        const qualifiedPackageName = packageJSON.publisher
+            ? `@${packageJSON.publisher}/${packageJSON.name}`
+            : packageJSON.name;
+        if (url.endsWith(`${qualifiedPackageName}/`)) {
+            const versionedURL = url.replace(new RegExp(`${qualifiedPackageName}/$`),
+                `${qualifiedPackageName}@${packageJSON.version}/`);
+            async function checkVersionedURL(): Promise<string> {
+                const response = await fetch(new URL('./package.json', versionedURL));
+                const versionedPackageJSON = await response.json();
+                if (versionedPackageJSON?.version !== packageJSON.version)
+                    throw new Error("metadata check failed");
+                return versionedURL;
+            }
+            url = await checkVersionedURL().then(
+                (versionedURL) => {
+                    console.log(
+                        `[YoWASP toolchain] Using versioned URL '${versionedURL}'`);
+                    return versionedURL;
+                },
+                (error) => {
+                    console.log(
+                        `[YoWASP toolchain] Not using versioned URL '${versionedURL}': ${error}`);
+                    return url;
+                }
+            );
         }
 
         let bundleNS: {
