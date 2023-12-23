@@ -32,7 +32,7 @@ interface BundlesLoadedMessage {
 
 interface TerminalOutputMessage {
     type: 'terminalOutput';
-    line: string;
+    data: string;
 }
 
 interface CommandDoneMessage {
@@ -130,8 +130,11 @@ function workerEntryPoint(self: WorkerContext) {
         try {
             files = await command(args, message.files, {
                 decodeASCII: false,
+                print(chars: string) {
+                    self.postMessage({ type: 'terminalOutput', data: chars });
+                },
                 printLine(line: string) {
-                    self.postMessage({ type: 'terminalOutput', line });
+                    self.postMessage({ type: 'terminalOutput', data: `${line}\n` });
                 }
             });
             self.postMessage({ type: 'commandDone', code: 0, files: files });
@@ -216,7 +219,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
                 break;
 
             case 'terminalOutput':
-                this.writeEmitter.fire(message.line + '\r\n');
+                this.writeEmitter.fire(message.data.replace('\n', '\r\n'));
                 break;
 
             case 'commandDone':
