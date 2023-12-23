@@ -34,6 +34,11 @@ interface LoadBundlesMessage {
     urls: string[];
 }
 
+interface PrepareCommandMessage {
+    type: 'prepareCommand';
+    name: string;
+}
+
 interface RunCommandMessage {
     type: 'runCommand';
     command: [string, ...string[]];
@@ -80,6 +85,7 @@ interface CommandDoneMessage {
 
 type HostToWorkerMessage =
     LoadBundlesMessage |
+    PrepareCommandMessage |
     RunCommandMessage |
     USBDeviceRequestedMessage;
 
@@ -160,6 +166,17 @@ function workerEntryPoint(self: WorkerContext) {
         });
     }
 
+    async function prepareCommand(message: PrepareCommandMessage) {
+        const bundle = bundles.find((bundle) => bundle.commands.has(message.name));
+        const command = bundle?.commands.get(message.name);
+        // Opportunistically preload the resources for this command. Do not wait for completion,
+        // ignore all errors.
+        if (command) {
+            console.log(`[YoWASP toolchain] Preloading resources for command '${message.name}'`);
+            command().then();
+        }
+    }
+
     let usbDeviceRequested: null | (() => void) = null;
 
     async function runCommand(message: RunCommandMessage) {
@@ -232,6 +249,9 @@ function workerEntryPoint(self: WorkerContext) {
             case 'loadBundles':
                 loadBundles(message);
                 break;
+            case 'prepareCommand':
+                prepareCommand(message);
+                break;
             case 'runCommand':
                 runCommand(message);
                 break;
@@ -293,8 +313,12 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.worker.terminate();
     }
 
-    private get command() {
+    private get command(): string[] {
         return this.script[this.scriptPosition];
+    }
+
+    private get nextCommand(): string[] | undefined {
+        return this.script[this.scriptPosition + 1];
     }
 
     private async processMessage(message: WorkerToHostMessage) {
@@ -343,11 +367,16 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     }
 
     private async runCommand(command: string[]) {
+        if (this.nextCommand !== undefined) {
+            // Preload the resources required by the next command in the script.
+            this.worker.postMessage({ type: 'prepareCommand', name: this.nextCommand[0] });
+        }
         this.printSystemMessage(`Running '${command.join(' ')}'...`);
         this.changeNameEmitter.fire(`YoWASP: ${command[0]}`);
         this.setStatus(`Running ${command[0]}...`);
         this.worker.postMessage({
-            type: 'runCommand', command,
+            type: 'runCommand',
+            command: command,
             files: await this.collectInputFiles(command)
         });
     }
