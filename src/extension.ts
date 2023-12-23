@@ -173,7 +173,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
     private worker: WorkerThread;
     private scriptPosition: number = 0;
-    private closeOnInput: boolean = false;
+    private closeOnEnter: boolean = false;
 
     constructor(private script: string[][], private waitOnceDone: boolean) {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -184,7 +184,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.worker.processMessage = this.processMessage.bind(this);
     }
 
-    open(_initialDimensions: vscode.TerminalDimensions | undefined): void {
+    open(_initialDimensions: vscode.TerminalDimensions | undefined) {
         const configuration = vscode.workspace.getConfiguration('yowaspToolchain');
         let baseURL = configuration.baseURL;
         if (!baseURL.endsWith('/'))
@@ -197,12 +197,12 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.worker.postMessage({ type: 'loadBundles', urls: bundleURLs });
     }
 
-    handleInput(_data: string): void {
-        if (this.closeOnInput)
+    handleInput(data: string) {
+        if (this.closeOnEnter && data === '\r')
             this.closeEmitter.fire(0);
     }
 
-    close(): void {
+    close() {
         this.statusBarItem.dispose();
         this.worker.terminate();
     }
@@ -246,8 +246,8 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
             this.scriptPosition += 1;
             this.runCommand(this.script[this.scriptPosition]);
         } else if (this.waitOnceDone) {
-            this.writeEmitter.fire(`\x1b[3mPress any key to close the terminal.\x1b[0m\r\n`);
-            this.closeOnInput = true;
+            this.writeEmitter.fire(`\x1b[3mPress Enter to close the terminal.\x1b[0m\r\n`);
+            this.closeOnEnter = true;
         } else {
             this.closeEmitter.fire(exitCode);
         }
