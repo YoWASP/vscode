@@ -72,8 +72,21 @@
                 "command": "yowasp.toolchain.runCommand",
                 "category": "YoWASP Toolchain",
                 "title": "Run Command..."
+            },
+            {
+                "command": "yowasp.toolchain.requestUSBDevice",
+                "category": "YoWASP Toolchain",
+                "title": "Connect USB Device..."
             }
         ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "yowasp.toolchain.requestUSBDevice",
+                    "when": "isWeb"
+                }
+            ]
+        },
         "taskDefinitions": [
             {
                 "type": "yowasp",
@@ -105,7 +118,7 @@
         "esbuild:node": "esbuild ./src/extension.ts --bundle --outdir=out/node/ --sourcemap --external:vscode --format=cjs --platform=node --define:USE_WEB_WORKERS=false",
         "esbuild:node:watch": "npm run esbuild:node -- --watch",
         "vscode:prepublish": "npm run esbuild:browser -- && npm run esbuild:node --",
-        "browser": "vscode-test-web --coi --extensionDevelopmentPath=. ."
+        "browser": "vscode-test-web --coi --extensionDevelopmentPath=. test"
     },
     "devDependencies": {
         "typescript": "^5.3.2",

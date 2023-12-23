@@ -1,8 +1,23 @@
 import * as vscode from 'vscode';
 import { WorkerContext, WorkerThread, WorkerThreadImpl } from './workerThread';
 
+declare var navigator: undefined | {
+    usb: undefined | {
+        getDevices(): Promise<any[]>
+    }
+};
+
 type Tree = {
     [name: string]: Tree | string | Uint8Array
+};
+
+type USBDeviceFilter = {
+    vendorId?: number,
+    productId?: number,
+    classCode?: number,
+    subclassCode?: number,
+    protocolCode?: number,
+    serialNumber?: number
 };
 
 type Command = {
@@ -10,7 +25,8 @@ type Command = {
         decodeASCII?: boolean,
         print?: (chars: string) => void,
         printLine?: (line: string) => void
-    }): Promise<Tree>,
+    }): Promise<Tree>;
+    requiresUSBDevice?: USBDeviceFilter[];
 };
 
 interface LoadBundlesMessage {
@@ -25,6 +41,7 @@ interface RunCommandMessage {
 }
 
 enum Severity {
+    fatal = 'fatal',
     error = 'error',
     warning = 'warning',
     info = 'info',
@@ -46,15 +63,32 @@ interface TerminalOutputMessage {
     data: string;
 }
 
+interface RequestUSBDeviceMessage {
+    type: 'requestUSBDevice';
+    filters: USBDeviceFilter[];
+}
+
+interface USBDeviceRequestedMessage {
+    type: 'usbDeviceRequested';
+}
+
 interface CommandDoneMessage {
     type: 'commandDone';
     code: number;
     files: Tree;
 }
 
-type HostToWorkerMessage = LoadBundlesMessage | RunCommandMessage;
+type HostToWorkerMessage =
+    LoadBundlesMessage |
+    RunCommandMessage |
+    USBDeviceRequestedMessage;
 
-type WorkerToHostMessage = BundlesLoadedMessage | DiagnosticMessage | TerminalOutputMessage | CommandDoneMessage;
+type WorkerToHostMessage =
+    BundlesLoadedMessage |
+    DiagnosticMessage |
+    TerminalOutputMessage |
+    RequestUSBDeviceMessage |
+    CommandDoneMessage;
 
 function workerEntryPoint(self: WorkerContext) {
     function postDiagnostic(severity: Severity, message: string) {
@@ -83,7 +117,7 @@ function workerEntryPoint(self: WorkerContext) {
             packageJSON = await fetch(packageJSONURL).then((resp) => resp.json());
         } catch (e) {
             postDiagnostic(Severity.error,
-                `Cannot fetch package metadata for bundle ${url}: ${e}`);
+                `Cannot fetch package metadata for bundle ${url}: ${e}.`);
             return;
         }
 
@@ -98,20 +132,20 @@ function workerEntryPoint(self: WorkerContext) {
             bundleNS = await self.importModule(entryPointURL);
         } catch (e) {
             postDiagnostic(Severity.error,
-                `Cannot import entry point for bundle ${url}: ${e}`);
+                `Cannot import entry point for bundle ${url}: ${e}.`);
             return;
         }
 
         if (typeof bundleNS.commands !== "object" || !(bundleNS.Exit.prototype instanceof Error)) {
             postDiagnostic(Severity.error,
-                `Bundle ${url} does not define any commands`);
+                `Bundle ${url} does not define any commands.`);
             return;
         }
 
         const commands = new Map();
-        for (const [command, runFn] of Object.entries(bundleNS.commands)) {
-            console.log(`[YoWASP toolchain] Command '${command}' defined in bundle ${url}`);
-            commands.set(command, runFn);
+        for (const [name, command] of Object.entries(bundleNS.commands)) {
+            console.log(`[YoWASP toolchain] Command '${name}' defined in bundle ${url}`);
+            commands.set(name, command);
         }
         bundles.push({ commands, exitError: bundleNS.Exit });
         urlsLoaded.push(url);
@@ -126,6 +160,8 @@ function workerEntryPoint(self: WorkerContext) {
         });
     }
 
+    let usbDeviceRequested: null | (() => void) = null;
+
     async function runCommand(message: RunCommandMessage) {
         const argv0 = message.command[0];
         const args = message.command.slice(1);
@@ -133,10 +169,39 @@ function workerEntryPoint(self: WorkerContext) {
         const bundle = bundles.find((bundle) => bundle.commands.has(argv0));
         const command = bundle?.commands.get(argv0);
         if (bundle === undefined || command === undefined) {
-            postDiagnostic(Severity.error,
-                `Cannot run '${argv0}': Command not found in any of the loaded bundles`);
-            self.postMessage({ type: 'commandDone', code: 255, files: {} });
+            postDiagnostic(Severity.fatal,
+                `The command '${argv0}' was not found in any of the loaded bundles.`);
             return;
+        }
+
+        if (command.requiresUSBDevice) {
+            if (typeof navigator === 'undefined' || typeof navigator.usb === 'undefined') {
+                postDiagnostic(Severity.fatal,
+                    `The command '${argv0}' requires WebUSB, but it is not available.`);
+                return;
+            }
+
+            let filtersMatch = false;
+            for (const usbDevice of await navigator.usb.getDevices()) {
+                if (command.requiresUSBDevice.length === 0) {
+                    filtersMatch = true;
+                } else {
+                    for (const filter of command.requiresUSBDevice) {
+                        filtersMatch ||= usbDevice.vendorId === filter.vendorId;
+                        filtersMatch ||= usbDevice.productId === filter.productId;
+                        filtersMatch ||= usbDevice.classCode === filter.classCode;
+                        filtersMatch ||= usbDevice.subclassCode === filter.subclassCode;
+                        filtersMatch ||= usbDevice.serialNumber === filter.serialNumber;
+                    }
+                }
+            }
+            if (!filtersMatch) {
+                self.postMessage({ type: 'requestUSBDevice', filters: command.requiresUSBDevice });
+                // Requesting a USB device never fails, but it does not have to actually result
+                // in a device, or the right device, becoming available. The application has to
+                // handle these cases.
+                await new Promise((resolve) => usbDeviceRequested = () => resolve(null));
+            }
         }
 
         let files;
@@ -156,8 +221,8 @@ function workerEntryPoint(self: WorkerContext) {
                 // @ts-ignore
                 self.postMessage({ type: 'commandDone', code: e.code, files: e.files });
             } else {
-                postDiagnostic(Severity.error,
-                    `Command '${message.command.join(' ')}' failed to run: ${e}`);
+                postDiagnostic(Severity.fatal,
+                    `Command '${message.command.join(' ')}' failed to run: ${e}.`);
             }
         }
     }
@@ -170,6 +235,14 @@ function workerEntryPoint(self: WorkerContext) {
             case 'runCommand':
                 runCommand(message);
                 break;
+            case 'usbDeviceRequested':
+                if (usbDeviceRequested) {
+                    usbDeviceRequested();
+                    usbDeviceRequested = null;
+                }
+                break;
+            default:
+                throw new Error(`Unrecognized command: ${message}`);
         }
     };
 }
@@ -220,7 +293,11 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.worker.terminate();
     }
 
-    private processMessage(message: WorkerToHostMessage) {
+    private get command() {
+        return this.script[this.scriptPosition];
+    }
+
+    private async processMessage(message: WorkerToHostMessage) {
         switch (message.type) {
             case 'diagnostic':
                 this.showDiagnosticMessage(message);
@@ -228,18 +305,38 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
             case 'bundlesLoaded':
                 console.log(`[YoWASP toolchain] Successfully loaded bundles:`, message.urls);
-                this.runCommand(this.script[this.scriptPosition]);
+                this.runCommand(this.command);
                 break;
 
             case 'terminalOutput':
                 this.writeEmitter.fire(message.data.replace('\n', '\r\n'));
                 break;
 
+            case 'requestUSBDevice':
+                const connectDeviceButton = "Connect Device";
+                const ignoreButton = "Ignore";
+                const selection = await vscode.window.showInformationMessage(
+                    `The '${this.command[0]}' command requests to use a USB device.`,
+                    connectDeviceButton, ignoreButton);
+                if (selection === connectDeviceButton) {
+                    try {
+                        await vscode.commands.executeCommand(
+                            'workbench.experimental.requestUsbDevice',
+                            message.filters);
+                    } catch {
+                        // Continue anyway, and let the application itself print an error:
+                        // (a) the application will be able to handle the error condition anyway;
+                        // (b) in many cases it's possible the user will select the wrong device.
+                        // For simplicity, have only one error path, in the application itself.
+                    }
+                }
+                this.worker.postMessage({ type: 'usbDeviceRequested' });
+                break;
+
             case 'commandDone':
                 this.printSystemMessage(`Command exited with status ${message.code}.`,
                     message.code === 0 ? Severity.info : Severity.error);
                 this.changeNameEmitter.fire('YoWASP');
-                this.setStatus(null);
                 this.finishCommand(message.code, message.files);
                 break;
         }
@@ -249,15 +346,19 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.printSystemMessage(`Running '${command.join(' ')}'...`);
         this.changeNameEmitter.fire(`YoWASP: ${command[0]}`);
         this.setStatus(`Running ${command[0]}...`);
-        this.worker.postMessage({ type: 'runCommand', command, files: await this.collectInputFiles(command) });
+        this.worker.postMessage({
+            type: 'runCommand', command,
+            files: await this.collectInputFiles(command)
+        });
     }
 
     private async finishCommand(exitCode: number, outputTree: Tree) {
+        this.setStatus(null);
         await this.extractOutputFiles(outputTree);
         if (exitCode === 0 && this.scriptPosition + 1 < this.script.length) {
             // Run next command
             this.scriptPosition += 1;
-            this.runCommand(this.script[this.scriptPosition]);
+            this.runCommand(this.command);
         } else if (this.waitOnceDone) {
             this.writeEmitter.fire(`\x1b[3mPress Enter to close the terminal.\x1b[0m\r\n`);
             this.closeOnEnter = true;
@@ -282,8 +383,9 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
                 let subtree = files;
                 do {
                     const nextSegmentIdx = arg.indexOf('/', segmentIdx + 1);
-                    const segment = nextSegmentIdx === -1 ?
-                        arg.substring(segmentIdx + 1) : arg.substring(segmentIdx + 1, nextSegmentIdx);
+                    const segment = nextSegmentIdx === -1
+                        ? arg.substring(segmentIdx + 1)
+                        : arg.substring(segmentIdx + 1, nextSegmentIdx);
                     if (nextSegmentIdx === -1) {
                         subtree[segment] = data;
                     } else if (segment === '') {
@@ -336,6 +438,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
     private printSystemMessage(text: string, severity: Severity = Severity.info) {
         switch (severity) {
+            case Severity.fatal:
             case Severity.error:
                 this.writeEmitter.fire(`\x1b[1;31m${text}\x1b[0m\r\n`);
                 break;
@@ -350,9 +453,13 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
     private showDiagnosticMessage(diagnostic: DiagnosticMessage) {
         switch (diagnostic.severity) {
+            case Severity.fatal:
             case Severity.error:
                 vscode.window.showErrorMessage(diagnostic.message);
                 this.printSystemMessage(diagnostic.message, diagnostic.severity);
+                if (diagnostic.severity === Severity.fatal) {
+                    this.finishCommand(255, {});
+                }
                 break;
             case Severity.warning:
                 vscode.window.showWarningMessage(diagnostic.message);
@@ -390,11 +497,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.build', async () => {
         const configuration = vscode.workspace.getConfiguration('yowaspToolchain');
         if (configuration.buildCommands === undefined || configuration.buildCommands.length === 0) {
-            // eslint-disable-next-line @typescript-eslint/naming-convention
-            const OpenSettings = "Open Settings";
-            const selection = await vscode.window.showErrorMessage('Configure the build commands to run a build.', OpenSettings);
-            if (selection === OpenSettings) {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'yowaspToolchain.buildCommands');
+            const openSettingsButton = "Open Settings";
+            const selection = await vscode.window.showErrorMessage(
+                "Configure the build commands to run a build.", openSettingsButton);
+            if (selection === openSettingsButton) {
+                vscode.commands.executeCommand('workbench.action.openSettings',
+                    'yowaspToolchain.buildCommands');
             }
         } else {
             buildTerminal?.dispose();
@@ -423,6 +531,14 @@ export function activate(context: vscode.ExtensionContext) {
                 isTransient: true
             });
             terminal.show();
+        }
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.requestUSBDevice', async () => {
+        try {
+            await vscode.commands.executeCommand('workbench.experimental.requestUsbDevice');
+        } catch {
+            // Cancelled.
         }
     }));
 }
