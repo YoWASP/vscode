@@ -323,19 +323,24 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     private changeNameEmitter = new vscode.EventEmitter<string>();
     onDidChangeName?: vscode.Event<string> = this.changeNameEmitter.event;
 
-    private statusBarItem: vscode.StatusBarItem;
+    private waitOnceDone: boolean;
+    private statusBarItem: null | vscode.StatusBarItem = null;
 
     private worker: WorkerThread;
     private scriptPosition: number = 0;
     private closeOnEnter: boolean = false;
 
-    constructor(private script: string[][], private waitOnceDone: boolean) {
-        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-        this.statusBarItem.name = 'YoWASP Toolchain';
-        this.statusBarItem.tooltip = this.statusBarItem.name;
+    constructor(private script: string[][], { waitOnceDone = true } = {}) {
+        this.waitOnceDone = waitOnceDone;
 
         this.worker = new WorkerThreadImpl(workerEntryPoint);
         this.worker.processMessage = this.processMessage.bind(this);
+    }
+
+    addStatusBarItem(command: vscode.Command) {
+        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+        this.statusBarItem.name = this.statusBarItem.tooltip = 'YoWASP Tool Running';
+        this.statusBarItem.command = command;
     }
 
     open(_initialDimensions: vscode.TerminalDimensions | undefined) {
@@ -357,7 +362,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     }
 
     close() {
-        this.statusBarItem.dispose();
+        this.statusBarItem?.dispose();
         this.worker.terminate();
     }
 
@@ -505,11 +510,13 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     }
 
     private setStatus(text: string | null) {
-        if (text !== null) {
-            this.statusBarItem.text = `$(gear) ${text}`;
-            this.statusBarItem.show();
-        } else {
-            this.statusBarItem.hide();
+        if (this.statusBarItem) {
+            if (text !== null) {
+                this.statusBarItem.text = `$(gear~spin) ${text}`;
+                this.statusBarItem.show();
+            } else {
+                this.statusBarItem.hide();
+            }
         }
     }
 
@@ -566,7 +573,7 @@ export function activate(context: vscode.ExtensionContext) {
             return new vscode.Task(definition, vscode.TaskScope.Workspace,
                 definition.commands.map((argv) => argv[0]).join(' && '),
                 'YoWASP', new vscode.CustomExecution(async (): Promise<vscode.Pseudoterminal> => {
-                    return new WorkerPseudioterminal(definition.commands, /*waitOnceDone=*/false);
+                    return new WorkerPseudioterminal(definition.commands, { waitOnceDone: false });
                 }));
         }
     }));
@@ -583,13 +590,20 @@ export function activate(context: vscode.ExtensionContext) {
             }
         } else {
             buildTerminal?.dispose();
-            buildTerminal = vscode.window.createTerminal({
-                name: 'YoWASP',
-                pty: new WorkerPseudioterminal(configuration.buildCommands, /*waitOnceDone=*/true),
-                isTransient: true
-            });
+
+            const pty = new WorkerPseudioterminal(configuration.buildCommands);
+            buildTerminal = vscode.window.createTerminal({name: 'YoWASP', pty, isTransient: true});
             buildTerminal.show(/*preserveFocus=*/true);
+            pty.addStatusBarItem({
+                title: "Show Terminal",
+                command: 'yowasp.toolchain.showTerminal',
+                arguments: [buildTerminal]
+            });
         }
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.showTerminal', (terminal) => {
+        terminal.show(/*preserveFocus=*/false);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.runCommand', async () => {
@@ -604,7 +618,7 @@ export function activate(context: vscode.ExtensionContext) {
                 lexems.push(match.groups?.uq || match.groups?.sq || match.groups?.dq || '<undefined>');
             const terminal = vscode.window.createTerminal({
                 name: 'YoWASP',
-                pty: new WorkerPseudioterminal([lexems], /*waitOnceDone=*/true),
+                pty: new WorkerPseudioterminal([lexems]),
                 isTransient: true
             });
             terminal.show();
