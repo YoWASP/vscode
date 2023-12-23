@@ -107,7 +107,7 @@
         "esbuild:node": "esbuild ./src/extension.ts --bundle --outdir=out/node/ --sourcemap --external:vscode --format=cjs --platform=node --define:USE_WEB_WORKERS=false",
         "esbuild:node:watch": "npm run esbuild:node -- --watch",
         "vscode:prepublish": "npm run esbuild:browser -- && npm run esbuild:node --",
-        "browser": "vscode-test-web --extensionDevelopmentPath=. ."
+        "browser": "vscode-test-web --coi --extensionDevelopmentPath=. ."
     },
     "devDependencies": {
         "@yowasp/runtime": "5.0.23",
@@ -117,7 +117,7 @@
         "eslint": "^8.54.0",
         "@typescript-eslint/parser": "^6.13.1",
         "@typescript-eslint/eslint-plugin": "^6.13.1",
-        "@vscode/test-web": "^0.0.22",
+        "@vscode/test-web": "^0.0.50",
         "esbuild": "^0.19.9"
     }
 }
