@@ -1,6 +1,17 @@
 import * as vscode from 'vscode';
 import { WorkerContext, WorkerThread, WorkerThreadImpl } from './workerThread';
-import type * as yowasp from '@yowasp/runtime';
+
+type Tree = {
+    [name: string]: Tree | string | Uint8Array
+};
+
+type Command = {
+    (args?: string[], files?: Tree, options?: {
+        decodeASCII?: boolean,
+        print?: (chars: string) => void,
+        printLine?: (line: string) => void
+    }): Promise<Tree>,
+};
 
 interface LoadBundlesMessage {
     type: 'loadBundles';
@@ -10,7 +21,7 @@ interface LoadBundlesMessage {
 interface RunCommandMessage {
     type: 'runCommand';
     command: [string, ...string[]];
-    files: yowasp.Tree;
+    files: Tree;
 }
 
 enum Severity {
@@ -38,7 +49,7 @@ interface TerminalOutputMessage {
 interface CommandDoneMessage {
     type: 'commandDone';
     code: number;
-    files: yowasp.Tree;
+    files: Tree;
 }
 
 type HostToWorkerMessage = LoadBundlesMessage | RunCommandMessage;
@@ -55,7 +66,7 @@ function workerEntryPoint(self: WorkerContext) {
     }
 
     interface Bundle {
-        commands: Map<string, yowasp.Application['run']>;
+        commands: Map<string, Command>;
         exitError: any;
     }
 
@@ -77,7 +88,7 @@ function workerEntryPoint(self: WorkerContext) {
         }
 
         let bundleNS: {
-            commands: { [name: string]: yowasp.Application['run'] },
+            commands: { [name: string]: Command },
             // eslint-disable-next-line @typescript-eslint/naming-convention
             Exit: any
         };
@@ -241,7 +252,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.worker.postMessage({ type: 'runCommand', command, files: await this.collectInputFiles(command) });
     }
 
-    private async finishCommand(exitCode: number, outputTree: yowasp.Tree) {
+    private async finishCommand(exitCode: number, outputTree: Tree) {
         await this.extractOutputFiles(outputTree);
         if (exitCode === 0 && this.scriptPosition + 1 < this.script.length) {
             // Run next command
@@ -256,7 +267,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     }
 
     private async collectInputFiles(command: string[]) {
-        const files: yowasp.Tree = {};
+        const files: Tree = {};
         for (const arg of command.slice(1)) {
             for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
                 const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, arg);
@@ -289,10 +300,10 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         return files;
     }
 
-    private async extractOutputFiles(tree: yowasp.Tree) {
+    private async extractOutputFiles(tree: Tree) {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders !== undefined && workspaceFolders.length >= 1) {
-            async function collect(tree: yowasp.Tree, prefix: string) {
+            async function collect(tree: Tree, prefix: string) {
                 for (const [name, contents] of Object.entries(tree)) {
                     if (contents instanceof Uint8Array) {
                         map.set(prefix + name, contents);
