@@ -48,6 +48,8 @@ By default, this extension downloads the latest version of each package (which c
         "@yowasp/yosys",
         "@yowasp/nextpnr-ice40",
         "@yowasp/nextpnr-ecp5"
+        "@yowasp/nextpnr-machxo2",
+        "@yowasp/nextpnr-nexus"
     ]
 }
 ```
