@@ -603,7 +603,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    disposeLater(vscode.commands.registerCommand('yowasp.toolchain.showTerminal', (terminal) => {
+    disposeLater(vscode.commands.registerCommand('yowasp.toolchain.showTerminal', (terminal: vscode.Terminal) => {
         terminal.show(/*preserveFocus=*/false);
     }));
 
