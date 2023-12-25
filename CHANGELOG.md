@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.1.5
+
+- None yet.
+
 ## 0.1.4
 
 - Added default bundle: `@yowasp/openfpgaloader`.
