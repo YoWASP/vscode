@@ -44,7 +44,8 @@
                         "@yowasp/nextpnr-ice40",
                         "@yowasp/nextpnr-ecp5",
                         "@yowasp/nextpnr-machxo2",
-                        "@yowasp/nextpnr-nexus"
+                        "@yowasp/nextpnr-nexus",
+                        "@yowasp/openfpgaloader"
                     ],
                     "markdownDescription": "URLs, or URL fragments relative to `yowaspToolchain.baseURL`, pointing to an entry point of a compiled YoWASP toolchain bundle. This is usually a bare `@yowasp/*` package name, but could also be an absolute URL pointing to the root of an NPM package.\n\nEach bundle can provide one or more commands. All of the bundles (< 1 MB each) are loaded at the beginning of the build to locate the commands, but the bundle resources (10s to 100s of MB) are loaded only when necessary to run a command. If multiple bundles provide the same command, the first one is used."
                 },

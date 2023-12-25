@@ -4,6 +4,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 ## 0.1.4 (unreleased)
 
+- Added default bundle: `@yowasp/openfpgaloader`.
 - The "Run Command..." prompt now remembers the last typed command within the session.
 
 ## 0.1.3

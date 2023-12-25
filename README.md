@@ -1,6 +1,6 @@
 # YoWASP Toolchain for VS Code
 
-**Run [Yosys][], [nextpnr][], ... in VS Code without installation.**
+**Run [Yosys][], [nextpnr][], [openFPGALoader][], ... in VS Code without installation.**
 
 This extension runs the open source FPGA toolchain *anywhere you can run VS Code*. Windows, Linux, macOS, Chromebooks, corporate networks, even [vscode.dev][]! Add it to VS Code, wait a few minutes, and get a bitstream; simple as that.
 
@@ -8,6 +8,7 @@ This extension runs the open source FPGA toolchain *anywhere you can run VS Code
 
 [yosys]: https://github.com/YosysHQ/yosys
 [nextpnr]: https://github.com/YosysHQ/nextpnr
+[openFPGALoader]: https://github.com/trabucayre/openFPGALoader
 [vscode.dev]: https://vscode.dev
 
 ## Getting started
@@ -49,7 +50,8 @@ By default, this extension downloads the latest version of each package (which c
         "@yowasp/nextpnr-ice40",
         "@yowasp/nextpnr-ecp5"
         "@yowasp/nextpnr-machxo2",
-        "@yowasp/nextpnr-nexus"
+        "@yowasp/nextpnr-nexus",
+        "@yowasp/openfpgaloader"
     ]
 }
 ```
