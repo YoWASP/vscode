@@ -561,9 +561,9 @@ interface ToolchainTaskDefinition extends vscode.TaskDefinition {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    let buildTerminal: vscode.Terminal | null = null;
+    const disposeLater = context.subscriptions.push.bind(context.subscriptions);
 
-    context.subscriptions.push(vscode.tasks.registerTaskProvider('yowasp', {
+    disposeLater(vscode.tasks.registerTaskProvider('yowasp', {
         async provideTasks(): Promise<vscode.Task[]> {
             return [];
         },
@@ -578,7 +578,8 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.build', async () => {
+    let buildTerminal: vscode.Terminal | null = null;
+    disposeLater(vscode.commands.registerCommand('yowasp.toolchain.build', async () => {
         const configuration = vscode.workspace.getConfiguration('yowaspToolchain');
         if (configuration.buildCommands === undefined || configuration.buildCommands.length === 0) {
             const openSettingsButton = "Open Settings";
@@ -602,30 +603,38 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.showTerminal', (terminal) => {
+    disposeLater(vscode.commands.registerCommand('yowasp.toolchain.showTerminal', (terminal) => {
         terminal.show(/*preserveFocus=*/false);
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.runCommand', async () => {
+    function lexCommandLine(commandLine: string): string[] {
         const LEX_RE = /\s*(?<uq>[^'"\s][^\s]*)|\s*'(?<sq>([^']|'[^\s])+)'|\s*"(?<dq>([^"]|"[^\s])+)"/g;
+        const lexems = [];
+        for (const match of commandLine.matchAll(LEX_RE))
+            lexems.push(match.groups?.uq || match.groups?.sq || match.groups?.dq || '<undefined>');
+        return lexems;
+    }
+
+    let lastCommandLine: string = "";
+    disposeLater(vscode.commands.registerCommand('yowasp.toolchain.runCommand', async () => {
         const commandLine = await vscode.window.showInputBox({
             prompt: 'Enter a command line',
-            placeHolder: 'yosys --version'
+            placeHolder: 'yosys --version',
+            value: lastCommandLine,
+            valueSelection: [lastCommandLine.indexOf(' ') + 1, lastCommandLine.length]
         });
         if (commandLine !== undefined) {
-            const lexems = [];
-            for (const match of commandLine.matchAll(LEX_RE))
-                lexems.push(match.groups?.uq || match.groups?.sq || match.groups?.dq || '<undefined>');
             const terminal = vscode.window.createTerminal({
                 name: 'YoWASP',
-                pty: new WorkerPseudioterminal([lexems]),
+                pty: new WorkerPseudioterminal([lexCommandLine(commandLine)]),
                 isTransient: true
             });
             terminal.show();
+            lastCommandLine = commandLine;
         }
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('yowasp.toolchain.requestUSBDevice', async () => {
+    disposeLater(vscode.commands.registerCommand('yowasp.toolchain.requestUSBDevice', async () => {
         try {
             await vscode.commands.executeCommand('workbench.experimental.requestUsbDevice');
         } catch {
