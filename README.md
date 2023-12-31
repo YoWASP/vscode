@@ -44,7 +44,7 @@ By default, this extension downloads the latest version of each package (which c
 
 ```json
 {
-    "yowaspToolchain.baseURL": "https://cdn.jsdelivr.net/npm/",
+    "yowaspToolchain.bundleBaseURL": "https://cdn.jsdelivr.net/npm/",
     "yowaspToolchain.bundles": [
         "@yowasp/yosys",
         "@yowasp/nextpnr-ice40",

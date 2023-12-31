@@ -4,7 +4,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 ## 0.1.5
 
-- None yet.
+- Renamed `yowaspToolchain.baseURL` setting to `yowaspToolchain.bundleBaseURL`.
 
 ## 0.1.4
 

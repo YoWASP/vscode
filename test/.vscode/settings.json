@@ -1,13 +1,13 @@
 {
-    "yowaspToolchain.bundles": [
-      "@yowasp/yosys",
-      "@yowasp/nextpnr-ecp5",
-      "@yowasp/openfpgaloader"
-    ],
-    "yowaspToolchain.buildCommands": [
-      ["yosys", "top.v", "-o", "top.json", "-p", "synth_ecp5"],
-      ["nextpnr-ecp5", "--85k", "--package", "CABGA381", "--json", "top.json", "--lpf", "top.lpf", "--textcfg", "top.config"],
-      ["ecppack", "--compress", "top.config", "top.bit"],
-      ["openFPGALoader", "-b", "ulx3s", "-m", "top.bit"]
-    ]
-  }
+  "yowaspToolchain.bundles": [
+    "@yowasp/yosys",
+    "@yowasp/nextpnr-ecp5",
+    "@yowasp/openfpgaloader"
+  ],
+  "yowaspToolchain.buildCommands": [
+    ["yosys", "top.v", "-o", "top.json", "-p", "synth_ecp5"],
+    ["nextpnr-ecp5", "--85k", "--package", "CABGA381", "--json", "top.json", "--lpf", "top.lpf", "--textcfg", "top.config"],
+    ["ecppack", "--compress", "top.config", "top.bit"],
+    ["openFPGALoader", "-b", "ulx3s", "-m", "top.bit"]
+  ]
+}

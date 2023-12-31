@@ -345,7 +345,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
     open(_initialDimensions: vscode.TerminalDimensions | undefined) {
         const configuration = vscode.workspace.getConfiguration('yowaspToolchain');
-        let baseURL = configuration.baseURL;
+        let baseURL = configuration.bundleBaseURL;
         if (!baseURL.endsWith('/'))
             baseURL += '/';
         const bundleURLs = configuration.bundles.map((bundleURLFragment: string) =>
