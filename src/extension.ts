@@ -36,9 +36,26 @@ type Command = {
     requiresUSBDevice?: USBDeviceFilter[];
 };
 
+interface CommandExit extends Error {
+    code: number;
+    files: Tree;
+}
+
+interface CommandExitConstructor extends ErrorConstructor {
+    readonly prototype: CommandExit;
+}
+
+type CommandLine = [string, ...string[]];
+
 interface LoadBundlesMessage {
     type: 'loadBundles';
     urls: string[];
+}
+
+interface LoadPyodideMessage {
+    type: 'loadPyodide';
+    url: string;
+    packages: string[];
 }
 
 interface PrepareCommandMessage {
@@ -48,7 +65,7 @@ interface PrepareCommandMessage {
 
 interface RunCommandMessage {
     type: 'runCommand';
-    command: [string, ...string[]];
+    command: CommandLine;
     files: Tree;
 }
 
@@ -68,6 +85,11 @@ interface DiagnosticMessage {
 interface BundlesLoadedMessage {
     type: 'bundlesLoaded';
     urls: string[];
+}
+
+interface PyodideLoadedMessage {
+    type: 'pyodideLoaded';
+    version: string;
 }
 
 interface TerminalOutputMessage {
@@ -92,20 +114,26 @@ interface CommandDoneMessage {
 
 type HostToWorkerMessage =
     LoadBundlesMessage |
+    LoadPyodideMessage |
     PrepareCommandMessage |
     RunCommandMessage |
     USBDeviceRequestedMessage;
 
 type WorkerToHostMessage =
     BundlesLoadedMessage |
+    PyodideLoadedMessage |
     DiagnosticMessage |
     TerminalOutputMessage |
     RequestUSBDeviceMessage |
     CommandDoneMessage;
 
 function workerEntryPoint(self: WorkerContext) {
+    function postMessage(message: WorkerToHostMessage) {
+        self.postMessage(message);
+    }
+
     function postDiagnostic(severity: Severity, message: string) {
-        self.postMessage({
+        postMessage({
             type: 'diagnostic',
             severity: severity,
             message: message
@@ -114,7 +142,7 @@ function workerEntryPoint(self: WorkerContext) {
 
     interface Bundle {
         commands: Map<string, Command>;
-        exitError: any;
+        exitError: CommandExitConstructor;
     }
 
     const bundles: Bundle[] = [];
@@ -126,7 +154,7 @@ function workerEntryPoint(self: WorkerContext) {
         let packageJSON: PackageJSON;
         try {
             const packageJSONURL = new URL('./package.json', url);
-            console.log(`[YoWASP toolchain] Loading metadata from ${packageJSONURL}`);
+            console.log(`[YoWASP toolchain] Loading bundle metadata from ${packageJSONURL}`);
             packageJSON = await fetch(packageJSONURL).then((resp) => resp.json());
         } catch (e) {
             postDiagnostic(Severity.error,
@@ -178,11 +206,11 @@ function workerEntryPoint(self: WorkerContext) {
         let bundleNS: {
             commands: { [name: string]: Command },
             // eslint-disable-next-line @typescript-eslint/naming-convention
-            Exit: any
+            Exit: CommandExitConstructor
         };
         try {
             const entryPointURL = new URL(packageJSON["exports"]["browser"], url);
-            console.log(`[YoWASP toolchain] Importing entry point from ${entryPointURL}`);
+            console.log(`[YoWASP toolchain] Importing bundle entry point from ${entryPointURL}`);
             bundleNS = await self.importModule(entryPointURL);
         } catch (e) {
             postDiagnostic(Severity.error,
@@ -208,9 +236,66 @@ function workerEntryPoint(self: WorkerContext) {
     async function loadBundles(message: LoadBundlesMessage) {
         const urlsLoaded: string[] = [];
         await Promise.all(message.urls.map((url) => loadBundleFromURL(url, urlsLoaded)));
-        self.postMessage({
+        postMessage({
             type: 'bundlesLoaded',
             urls: urlsLoaded
+        });
+    }
+
+    let instantiatePyodide: null | ((homeDir: string, args: string[]) => Promise<{
+        FS: any,
+        loadPackage(names: string | string[]): Promise<void>,
+        pyimport(mod_name: string): any,
+        runPython(code: string, options: { filename?: string }): any,
+        runPythonAsync(code: string, options: { filename?: string }): Promise<any>,
+        ffi: {
+            PythonError: ErrorConstructor,
+            JsException: ErrorConstructor,
+        },
+    }>) = null;
+    let pythonRequirements: string[] = [];
+
+    async function loadPyodide(message: LoadPyodideMessage) {
+        let pyodideNS: {
+            loadPyodide(options: {
+                indexURL?: URL | string,
+                args?: string[],
+                env?: {[key: string]: string},
+                jsglobals?: any,
+                packages?: string[],
+                stdin?: () => string | undefined,
+                stdout?: (line: string) => void,
+                stderr?: (line: string) => void,
+            }): Promise<any>;
+            version: string;
+        };
+        const indexURL = new URL('./full/', message.url);
+        const entryPointURL = new URL('./pyodide.mjs', indexURL);
+        try {
+            console.log(`[YoWASP toolchain] Importing Pyodide entry point from ${entryPointURL}`);
+            pyodideNS = await self.importModule(entryPointURL);
+        } catch (e) {
+            postDiagnostic(Severity.error,
+                `Cannot import Pyodide entry point from ${entryPointURL}: ${e}.`);
+            return;
+        }
+        instantiatePyodide = async (homeDir, args) => await pyodideNS.loadPyodide({
+            indexURL,
+            args,
+            env: { HOME: homeDir },
+            jsglobals: {
+                Object,
+                fetch: fetch.bind(globalThis),
+                setTimeout: setTimeout.bind(globalThis),
+                clearTimeout: clearTimeout.bind(globalThis),
+            },
+            stdout: (line: string) => postMessage({ type: 'terminalOutput', data: `${line}\n` }),
+            stderr: (line: string) => postMessage({ type: 'terminalOutput', data: `${line}\n` }),
+        });
+        pythonRequirements = message.packages;
+        postMessage({
+            type: 'pyodideLoaded',
+            version: pyodideNS.version,
         });
     }
 
@@ -227,10 +312,7 @@ function workerEntryPoint(self: WorkerContext) {
 
     let usbDeviceRequested: null | (() => void) = null;
 
-    async function runCommand(message: RunCommandMessage) {
-        const argv0 = message.command[0];
-        const args = message.command.slice(1);
-
+    async function runBundleCommand([argv0, ...args]: CommandLine, filesIn: Tree) {
         const bundle = bundles.find((bundle) => bundle.commands.has(argv0));
         const command = bundle?.commands.get(argv0);
         if (bundle === undefined || command === undefined) {
@@ -261,7 +343,7 @@ function workerEntryPoint(self: WorkerContext) {
                 }
             }
             if (!filtersMatch) {
-                self.postMessage({ type: 'requestUSBDevice', filters: command.requiresUSBDevice });
+                postMessage({ type: 'requestUSBDevice', filters: command.requiresUSBDevice });
                 // Requesting a USB device never fails, but it does not have to actually result
                 // in a device, or the right device, becoming available. The application has to
                 // handle these cases.
@@ -269,26 +351,114 @@ function workerEntryPoint(self: WorkerContext) {
             }
         }
 
-        let files;
         try {
-            files = await command(args, message.files, {
+            const filesOut = await command(args, filesIn, {
                 decodeASCII: false,
-                print(chars: string) {
-                    self.postMessage({ type: 'terminalOutput', data: chars });
-                },
-                printLine(line: string) {
-                    self.postMessage({ type: 'terminalOutput', data: `${line}\n` });
-                }
+                print: (chars: string) =>
+                    postMessage({ type: 'terminalOutput', data: chars }),
+                printLine: (line: string) =>
+                    postMessage({ type: 'terminalOutput', data: `${line}\n` }),
             });
-            self.postMessage({ type: 'commandDone', code: 0, files: files });
+            postMessage({ type: 'commandDone', code: 0, files: filesOut });
         } catch (e) {
             if (e instanceof bundle.exitError) {
-                // @ts-ignore
-                self.postMessage({ type: 'commandDone', code: e.code, files: e.files });
+                postMessage({ type: 'commandDone', code: e.code, files: e.files });
             } else {
                 postDiagnostic(Severity.fatal,
-                    `Command '${message.command.join(' ')}' failed to run: ${e}.`);
+                    `Command '${[argv0, ...args].join(' ')}' failed to run: ${e}.`);
             }
+        }
+    }
+
+    async function runPythonCommand(args: string[], filesIn: Tree) {
+        if (args[0].startsWith('-') && !['-c'].includes(args[0])) {
+            postDiagnostic(Severity.fatal,
+                `Only '-c' or a filename are accepted as the first argument of the 'python' command.`);
+            return;
+        }
+
+        // `workerEntryPoint()` has to be self-contained, so we can't import these from anywhere.
+        function writeTreeToFS(FS: any, tree: any, path = '/') {
+            for(const [filename, data] of Object.entries(tree)) {
+                const filepath = `${path}${filename}`;
+                if (typeof data === 'string' || data instanceof Uint8Array) {
+                    FS.writeFile(filepath, data);
+                } else {
+                    FS.mkdir(filepath);
+                    writeTreeToFS(FS, data, `${filepath}/`);
+                }
+            }
+        }
+
+        function readTreeFromFS(FS: any, path = '/') {
+            const tree: any = {};
+            for (const filename of FS.readdir(path)) {
+                const filepath = `${path}${filename}`;
+                if (filename === '.' || filename === '..')
+                    continue;
+                const stat = FS.stat(filepath);
+                if (FS.isFile(stat.mode)) {
+                    tree[filename] = FS.readFile(filepath, { encoding: 'binary' });
+                } else if (FS.isDir(stat.mode)) {
+                    tree[filename] = readTreeFromFS(FS, `${filepath}/`);
+                }
+            }
+            return tree;
+        }
+
+        const homeDir = '/root';
+
+        let PythonError: ErrorConstructor | undefined;
+        async function preparePyodide(args: string[]) {
+            console.log(`[YoWASP Toolchain] Instantiating Pyodide...`);
+            const pyodide = await instantiatePyodide!(homeDir, ['--', ...args]);
+            PythonError = pyodide.ffi.PythonError;
+            writeTreeToFS(pyodide.FS, filesIn, `${homeDir}/`);
+            // Install packages after writing to filesystem. This is done after writing files to
+            // make it possible to install wheels placed in the workspace.
+            console.log(`[YoWASP Toolchain] Installing packages (${pythonRequirements.join(', ')})...`);
+            await pyodide.loadPackage('micropip');
+            await pyodide.pyimport('micropip').install(pythonRequirements);
+            return pyodide;
+        }
+
+        let pyodide;
+        try {
+            if (args[0] === '-c') {
+                pyodide = await preparePyodide(['-c', ...args.slice(2)]);
+                console.log(`[YoWASP Toolchain] Running Python string '${args.join(' ')}'...`);
+                pyodide.runPython(args[1], { filename: '<string>' });
+            } else {
+                pyodide = await preparePyodide(args);
+                console.log(`[YoWASP Toolchain] Running Python file '${args[0]}'...`);
+                const pyArgv0 = `__import__("sys").argv[0]`;
+                const pyReadFile = `(lambda f: (f.read(), f.close()))(open(${pyArgv0}))[0]`;
+                const pyLoader = `exec(compile(${pyReadFile}, ${pyArgv0}, 'exec'))`;
+                pyodide.runPython(pyLoader, { filename: '<loader>' });
+            }
+            const filesOut = readTreeFromFS(pyodide.FS, `${homeDir}/`);
+            postMessage({ type: 'commandDone', code: 0, files: filesOut });
+        } catch(e) {
+            if (pyodide !== undefined && (e instanceof pyodide.ffi.PythonError)) {
+                postMessage({ type: 'terminalOutput', data: e.message });
+                const filesOut = readTreeFromFS(pyodide.FS, `${homeDir}/`);
+                postMessage({ type: 'commandDone', code: 1, files: filesOut });
+            } else if (PythonError !== undefined && (e instanceof PythonError)) {
+                // This branch is taken when Pyodide crashes before it is fully prepared.
+                postMessage({ type: 'terminalOutput', data: e.message });
+                postDiagnostic(Severity.fatal, `Failed to install Python packages.`);
+            } else {
+                postDiagnostic(Severity.fatal,
+                    `Command 'python ${args.join(' ')}' failed to run: ${e}.`);
+            }
+        }
+    }
+
+    function runCommand(message: RunCommandMessage) {
+        if (message.command[0] === 'python') {
+            return runPythonCommand(message.command.slice(1), message.files);
+        } else {
+            return runBundleCommand(message.command, message.files);
         }
     }
 
@@ -296,6 +466,9 @@ function workerEntryPoint(self: WorkerContext) {
         switch (message.type) {
             case 'loadBundles':
                 loadBundles(message);
+                break;
+            case 'loadPyodide':
+                loadPyodide(message);
                 break;
             case 'prepareCommand':
                 prepareCommand(message);
@@ -309,10 +482,22 @@ function workerEntryPoint(self: WorkerContext) {
                     usbDeviceRequested = null;
                 }
                 break;
-            default:
-                throw new Error(`Unrecognized command: ${message}`);
         }
     };
+}
+
+enum CommandType {
+    Bundle = 'bundle',
+    Python = 'python',
+}
+
+function classifyCommandLine([command, ]: CommandLine) {
+    switch (command) {
+        case 'python':
+            return CommandType.Python;
+        default:
+            return CommandType.Bundle;
+    }
 }
 
 class WorkerPseudioterminal implements vscode.Pseudoterminal {
@@ -327,10 +512,12 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     private statusBarItem: null | vscode.StatusBarItem = null;
 
     private worker: WorkerThread;
+    private bundlesLoaded: boolean = false;
+    private pyodideLoaded: boolean = false;
     private scriptPosition: number = 0;
     private closeOnEnter: boolean = false;
 
-    constructor(private script: string[][], { waitOnceDone = true } = {}) {
+    constructor(private script: CommandLine[], { waitOnceDone = true } = {}) {
         this.waitOnceDone = waitOnceDone;
 
         this.worker = new WorkerThreadImpl(workerEntryPoint);
@@ -345,15 +532,28 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
     open(_initialDimensions: vscode.TerminalDimensions | undefined) {
         const configuration = vscode.workspace.getConfiguration('yowaspToolchain');
-        let baseURL = configuration.bundleBaseURL;
-        if (!baseURL.endsWith('/'))
-            baseURL += '/';
+        let bundlesBaseURL = configuration.bundleBaseURL;
+        if (!bundlesBaseURL.endsWith('/'))
+            bundlesBaseURL += '/';
         const bundleURLs = configuration.bundles.map((bundleURLFragment: string) =>
-            new URL(bundleURLFragment, baseURL).toString());
+            new URL(bundleURLFragment, bundlesBaseURL).toString());
+        const pyodideURL = configuration.pyodideBaseURL;
 
-        this.printSystemMessage(`Loading toolchains...`);
-        this.setStatus('Loading toolchains...');
-        this.worker.postMessage({ type: 'loadBundles', urls: bundleURLs });
+        this.printSystemMessage(`Loading tools...`);
+        this.setStatus('Loading tools...');
+        if (this.usesCommandType(CommandType.Bundle)) {
+            this.postMessage({
+                type: 'loadBundles',
+                urls: bundleURLs
+            });
+        }
+        if (this.usesCommandType(CommandType.Python)) {
+            this.postMessage({
+                type: 'loadPyodide',
+                url: pyodideURL,
+                packages: configuration.pythonRequirements
+            });
+        }
     }
 
     handleInput(data: string) {
@@ -366,12 +566,20 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.worker.terminate();
     }
 
-    private get command(): string[] {
+    private usesCommandType(commandType: CommandType) {
+        return this.script.map(classifyCommandLine).includes(commandType);
+    }
+
+    private get command(): CommandLine {
         return this.script[this.scriptPosition];
     }
 
-    private get nextCommand(): string[] | undefined {
+    private get nextCommand(): CommandLine | undefined {
         return this.script[this.scriptPosition + 1];
+    }
+
+    private postMessage(message: HostToWorkerMessage) {
+        this.worker.postMessage(message);
     }
 
     private async processMessage(message: WorkerToHostMessage) {
@@ -382,11 +590,18 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
             case 'bundlesLoaded':
                 console.log(`[YoWASP toolchain] Successfully loaded bundles:`, message.urls);
-                this.runCommand(this.command);
+                this.bundlesLoaded = true;
+                this.runFirstCommandIfAllLoaded();
+                break;
+
+            case 'pyodideLoaded':
+                console.log(`[YoWASP toolchain] Successfully loaded Pyodide ${message.version}`);
+                this.pyodideLoaded = true;
+                this.runFirstCommandIfAllLoaded();
                 break;
 
             case 'terminalOutput':
-                this.writeEmitter.fire(message.data.replace('\n', '\r\n'));
+                this.writeEmitter.fire(message.data.replace(/\n/g, '\r\n'));
                 break;
 
             case 'requestUSBDevice':
@@ -407,7 +622,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
                         // For simplicity, have only one error path, in the application itself.
                     }
                 }
-                this.worker.postMessage({ type: 'usbDeviceRequested' });
+                this.postMessage({ type: 'usbDeviceRequested' });
                 break;
 
             case 'commandDone':
@@ -419,18 +634,31 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         }
     }
 
-    private async runCommand(command: string[]) {
+    private async runFirstCommandIfAllLoaded() {
+        if (this.usesCommandType(CommandType.Bundle) && !this.bundlesLoaded)
+            return;
+        if (this.usesCommandType(CommandType.Python) && !this.pyodideLoaded)
+            return;
+        await this.runCommand();
+    }
+
+    private async runNextCommand() {
+        this.scriptPosition += 1;
+        await this.runCommand();
+    }
+
+    private async runCommand() {
         if (this.nextCommand !== undefined) {
             // Preload the resources required by the next command in the script.
-            this.worker.postMessage({ type: 'prepareCommand', name: this.nextCommand[0] });
+            this.postMessage({ type: 'prepareCommand', name: this.nextCommand[0] });
         }
-        this.printSystemMessage(`Running '${command.join(' ')}'...`);
-        this.changeNameEmitter.fire(`YoWASP: ${command[0]}`);
-        this.setStatus(`Running ${command[0]}...`);
-        this.worker.postMessage({
+        this.printSystemMessage(`Running '${this.command.join(' ')}'...`);
+        this.changeNameEmitter.fire(`YoWASP: ${this.command[0]}`);
+        this.setStatus(`Running ${this.command[0]}...`);
+        this.postMessage({
             type: 'runCommand',
-            command: command,
-            files: await this.collectInputFiles(command)
+            command: this.command,
+            files: await this.collectInputFiles(this.command)
         });
     }
 
@@ -438,9 +666,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.setStatus(null);
         await this.extractOutputFiles(outputTree);
         if (exitCode === 0 && this.scriptPosition + 1 < this.script.length) {
-            // Run next command
-            this.scriptPosition += 1;
-            this.runCommand(this.command);
+            this.runNextCommand();
         } else if (this.waitOnceDone) {
             this.writeEmitter.fire(`\x1b[3mPress Enter to close the terminal.\x1b[0m\r\n`);
             this.closeOnEnter = true;
@@ -449,63 +675,95 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         }
     }
 
-    private async collectInputFiles(command: string[]) {
+    private get workspaceFolder() {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders !== undefined && workspaceFolders.length >= 1)
+            return workspaceFolders[0];
+        throw new Error(`Only workspaces with a single root folder are supported`);
+    }
+
+    private async collectInputFiles(commandLine: CommandLine) {
+        switch (classifyCommandLine(commandLine)) {
+            case CommandType.Bundle:
+                return this.collectInputFilesForBundle(commandLine);
+            case CommandType.Python:
+                return this.collectInputFilesForPython();
+        }
+    }
+
+    private async collectInputFilesForBundle(commandLine: CommandLine) {
         const files: Tree = {};
-        for (const arg of command.slice(1)) {
-            for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
-                const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, arg);
-                let data;
-                try {
-                    data = new Uint8Array(await vscode.workspace.fs.readFile(fileUri));
-                    console.log(`[YoWASP toolchain] Read input file ${arg} at ${fileUri}`);
-                } catch (e) {
-                    continue;
-                }
-                let segmentIdx = -1;
-                let subtree = files;
-                do {
-                    const nextSegmentIdx = arg.indexOf('/', segmentIdx + 1);
-                    const segment = nextSegmentIdx === -1
-                        ? arg.substring(segmentIdx + 1)
-                        : arg.substring(segmentIdx + 1, nextSegmentIdx);
-                    if (nextSegmentIdx === -1) {
-                        subtree[segment] = data;
-                    } else if (segment === '') {
-                        /* skip segment */
-                    } else {
-                        subtree[segment] ??= {};
-                        // @ts-ignore
-                        subtree = subtree[segment];
-                    }
-                    segmentIdx = nextSegmentIdx;
-                } while (segmentIdx !== -1);
+        for (const arg of commandLine.slice(1)) {
+            const fileUri = vscode.Uri.joinPath(this.workspaceFolder.uri, arg);
+            let data;
+            try {
+                data = new Uint8Array(await vscode.workspace.fs.readFile(fileUri));
+                console.log(`[YoWASP toolchain] Read input file ${arg} at ${fileUri}`);
+            } catch (e) {
+                continue;
             }
+            let segmentIdx = -1;
+            let subtree = files;
+            do {
+                const nextSegmentIdx = arg.indexOf('/', segmentIdx + 1);
+                const segment = nextSegmentIdx === -1
+                    ? arg.substring(segmentIdx + 1)
+                    : arg.substring(segmentIdx + 1, nextSegmentIdx);
+                if (nextSegmentIdx === -1) {
+                    subtree[segment] = data;
+                } else if (segment === '') {
+                    /* skip segment */
+                } else {
+                    subtree[segment] ??= {};
+                    // @ts-ignore
+                    subtree = subtree[segment];
+                }
+                segmentIdx = nextSegmentIdx;
+            } while (segmentIdx !== -1);
         }
         return files;
     }
 
-    private async extractOutputFiles(tree: Tree) {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders !== undefined && workspaceFolders.length >= 1) {
-            async function collect(tree: Tree, prefix: string) {
-                for (const [name, contents] of Object.entries(tree)) {
-                    if (contents instanceof Uint8Array) {
-                        map.set(prefix + name, contents);
-                    } else if (typeof contents === 'string') {
-                        map.set(prefix + name, new TextEncoder().encode(contents));
-                    } else {
-                        collect(contents, prefix + name + '/');
-                    }
+    private async collectInputFilesForPython() {
+        async function collect(uri: vscode.Uri) {
+            const tree: Tree = {};
+            for (const [entryName, fileType] of await vscode.workspace.fs.readDirectory(uri)) {
+                const entryUri = vscode.Uri.joinPath(uri, entryName);
+                if (fileType & vscode.FileType.Directory) {
+                    tree[entryName] = await collect(entryUri);
+                    console.log(`[YoWASP toolchain] Collected input directory at ${entryUri}`);
+                } else if (fileType & vscode.FileType.File) {
+                    tree[entryName] = await vscode.workspace.fs.readFile(entryUri);
+                    console.log(`[YoWASP toolchain] Read input file at ${entryUri}`);
+                } else {
+                    throw new Error('what');
                 }
             }
+            return tree;
+        }
 
-            const map = new Map();
-            collect(tree, '/');
-            for (const [path, contents] of map) {
-                const fileUri = vscode.Uri.joinPath(workspaceFolders[0].uri, path);
-                await vscode.workspace.fs.writeFile(fileUri, contents);
-                console.log(`[YoWASP toolchain] Wrote output file ${path} at ${fileUri}`);
+        return collect(this.workspaceFolder.uri);
+    }
+
+    private async extractOutputFiles(tree: Tree) {
+        async function collect(tree: Tree, prefix: string) {
+            for (const [name, contents] of Object.entries(tree)) {
+                if (contents instanceof Uint8Array) {
+                    map.set(prefix + name, contents);
+                } else if (typeof contents === 'string') {
+                    map.set(prefix + name, new TextEncoder().encode(contents));
+                } else {
+                    collect(contents, prefix + name + '/');
+                }
             }
+        }
+
+        const map = new Map();
+        collect(tree, '/');
+        for (const [path, contents] of map) {
+            const fileUri = vscode.Uri.joinPath(this.workspaceFolder.uri, path);
+            await vscode.workspace.fs.writeFile(fileUri, contents);
+            console.log(`[YoWASP toolchain] Wrote output file ${path} at ${fileUri}`);
         }
     }
 
@@ -543,6 +801,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
                 this.printSystemMessage(diagnostic.message, diagnostic.severity);
                 if (diagnostic.severity === Severity.fatal) {
                     this.finishCommand(255, {});
+                    this.changeNameEmitter.fire('YoWASP (Error)');
                 }
                 break;
             case Severity.warning:
@@ -557,7 +816,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 }
 
 interface ToolchainTaskDefinition extends vscode.TaskDefinition {
-    commands: ([string, ...string[]])[];
+    commands: CommandLine[];
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -569,7 +828,7 @@ export function activate(context: vscode.ExtensionContext) {
         },
 
         resolveTask(task: vscode.Task): vscode.Task | undefined {
-            const definition: ToolchainTaskDefinition = <any>task.definition;
+            const definition = task.definition as ToolchainTaskDefinition;
             return new vscode.Task(definition, vscode.TaskScope.Workspace,
                 definition.commands.map((argv) => argv[0]).join(' && '),
                 'YoWASP', new vscode.CustomExecution(async (): Promise<vscode.Pseudoterminal> => {
@@ -607,30 +866,39 @@ export function activate(context: vscode.ExtensionContext) {
         terminal.show(/*preserveFocus=*/false);
     }));
 
-    function lexCommandLine(commandLine: string): string[] {
+    function lexCommandLine(commandInput: string | undefined): CommandLine | undefined {
+        if (commandInput === undefined)
+            return undefined;
+
         const LEX_RE = /\s*(?<uq>[^'"\s][^\s]*)|\s*'(?<sq>([^']|'[^\s])+)'|\s*"(?<dq>([^"]|"[^\s])+)"/g;
         const lexems = [];
-        for (const match of commandLine.matchAll(LEX_RE))
+        for (const match of commandInput.matchAll(LEX_RE))
             lexems.push(match.groups?.uq || match.groups?.sq || match.groups?.dq || '<undefined>');
-        return lexems;
+        if (lexems.length >= 1) {
+            const [command, ...args] = lexems;
+            return [command, ...args];
+        } else {
+            return undefined;
+        }
     }
 
-    let lastCommandLine: string = "";
+    let lastCommandInput: string = "";
     disposeLater(vscode.commands.registerCommand('yowasp.toolchain.runCommand', async () => {
-        const commandLine = await vscode.window.showInputBox({
+        const commandInput = await vscode.window.showInputBox({
             prompt: 'Enter a command line',
             placeHolder: 'yosys --version',
-            value: lastCommandLine,
-            valueSelection: [lastCommandLine.indexOf(' ') + 1, lastCommandLine.length]
+            value: lastCommandInput,
+            valueSelection: [lastCommandInput.indexOf(' ') + 1, lastCommandInput.length]
         });
-        if (commandLine !== undefined) {
+        const commandLine = lexCommandLine(commandInput);
+        if (commandInput !== undefined && commandLine !== undefined) {
             const terminal = vscode.window.createTerminal({
                 name: 'YoWASP',
-                pty: new WorkerPseudioterminal([lexCommandLine(commandLine)]),
+                pty: new WorkerPseudioterminal([commandLine]),
                 isTransient: true
             });
             terminal.show();
-            lastCommandLine = commandLine;
+            lastCommandInput = commandInput;
         }
     }));
 

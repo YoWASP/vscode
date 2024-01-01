@@ -6,7 +6,7 @@
     "author": "Catherine <whitequark@whitequark.org>",
     "license": "ISC",
     "homepage": "https://yowasp.org/",
-    "version": "0.1.5",
+    "version": "0.2.0",
     "repository": {
         "type": "git",
         "url": "https://github.com/YoWASP/vscode.git"
@@ -49,6 +49,19 @@
                     ],
                     "markdownDescription": "URLs, or URL fragments relative to `yowaspToolchain.bundleBaseURL`, pointing to an entry point of a compiled YoWASP toolchain bundle. This is usually a bare `@yowasp/*` package name, but could also be an absolute URL pointing to the root of an NPM package.\n\nEach bundle can provide one or more commands. All of the bundles (< 1 MB each) are loaded at the beginning of the build to locate the commands, but the bundle resources (10s to 100s of MB) are loaded only when necessary to run a command. If multiple bundles provide the same command, the first one is used."
                 },
+                "yowaspToolchain.pyodideBaseURL": {
+                    "type": "string",
+                    "default": "https://cdn.jsdelivr.net/pyodide/v0.24.1/",
+                    "markdownDescription": "Base URL to use for [Pyodide](https://pyodide.org/), which provides Python language support. This is usually pointing to a CDN delivering a build of Pyodide.\n\nThe `vX.Y.Z` path fragment can be changed to load a different Pyodide version. Note that [Pyodide versioning](https://pyodide.org/en/stable/project/changelog.html) is independent from Python interpreter versioning, and Pyodide does not yet have a stable API; changing the `vX.Y` part of the version may result in a non-functional toolchain."
+                },
+                "yowaspToolchain.pythonRequirements": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [],
+                    "markdownDescription": "[Requirement specifiers](https://pip.pypa.io/en/stable/reference/requirement-specifiers/#requirement-specifiers) for Python packages that are installed whenever a `python` command is executed. See [micropip documentation](https://micropip.pyodide.org/en/v0.2.2/project/api.html#micropip.install) for an exhaustive description of the syntax supported for requirements."
+                },
                 "yowaspToolchain.buildCommands": {
                     "type": "array",
                     "items": {
@@ -59,7 +72,7 @@
                         "minItems": 1
                     },
                     "minItems": 1,
-                    "markdownDescription": "The sequence of commands to be executed by the \"YoWASP Toolchain: Run Build...\" command.\n\nEach command is an array where the first element specifies the command to run, and the rest specify its arguments. Input or output files must appear as their own argument and not be concatenated with an option.\n\nE.g.:\n```\n[\n  [\"yosys\", \"top.v\", \"-p\", \"synth_ice40\", \"-o\", \"top.json\"],\n  [\"nextpnr-ice40\", \"--hx8k\", \"--package\", \"ct256\", \"--json\", \"top.json\", \"--asc\", \"top.asc\"]\n]\n```"
+                    "markdownDescription": "The sequence of commands executed by the \"YoWASP Toolchain: Build...\" command.\n\nEach command is an array where the first element specifies the command to run, and the rest specify its arguments. Input or output files **must appear as their own argument** and not be concatenated with an option.\n\nE.g.:\n```\n[\n  [\"yosys\", \"top.v\", \"-p\", \"synth_ice40\", \"-o\", \"top.json\"],\n  [\"nextpnr-ice40\", \"--hx8k\", \"--package\", \"ct256\", \"--json\", \"top.json\", \"--asc\", \"top.asc\"]\n]\n```"
                 }
             }
         },
@@ -119,7 +132,7 @@
         "esbuild:node": "esbuild ./src/extension.ts --bundle --outdir=out/node/ --sourcemap --external:vscode --format=cjs --platform=node --define:USE_WEB_WORKERS=false",
         "esbuild:node:watch": "npm run esbuild:node -- --watch",
         "vscode:prepublish": "npm run esbuild:browser -- && npm run esbuild:node --",
-        "browser": "vscode-test-web --coi --extensionDevelopmentPath=. test"
+        "browser": "vscode-test-web --coi --browserOption=--remote-debugging-port=9222 --extensionDevelopmentPath=. test"
     },
     "devDependencies": {
         "typescript": "^5.3.2",

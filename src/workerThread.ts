@@ -1,4 +1,7 @@
-/* eslint-disable @typescript-eslint/naming-convention */
+// This binding is injected with `esbuild --define:USE_WEB_WORKERS=...`.
+declare var USE_WEB_WORKERS: boolean;
+
+import type * as nodeWorkerThreads from 'node:worker_threads';
 
 export interface MessageChannel {
     postMessage(message: any): void;
@@ -13,11 +16,11 @@ export interface WorkerThread extends MessageChannel {
     terminate(): void;
 }
 
-export interface WorkerThreadFactory {
+export interface WorkerThreadConstructor {
     new (entryPoint: (self: WorkerContext) => void): WorkerThread;
 }
 
-let WorkerThreadImpl: WorkerThreadFactory;
+let WorkerThreadImpl: WorkerThreadConstructor;
 if (USE_WEB_WORKERS) {
     WorkerThreadImpl = class implements MessageChannel {
         #platformWorker: Worker;
@@ -62,43 +65,83 @@ if (USE_WEB_WORKERS) {
         }
     };
 } else {
-    const vm = require('node:vm');
-    const threads = require('node:worker_threads');
+    const threads: typeof nodeWorkerThreads = require('node:worker_threads');
 
     WorkerThreadImpl = class implements MessageChannel {
-        #platformThread: threads.Worker;
+        #platformThread: nodeWorkerThreads.Worker;
 
         constructor(entryPoint: (self: WorkerContext) => void) {
             function createSelf() {
                 const vm = require('node:vm');
                 const threads = require('node:worker_threads');
+                const crypto = require('node:crypto');
 
                 // At the moment of writing, VS Code ships Node v18.15.0. This version:
                 // - cannot dynamically import from https:// URLs;
                 // - does not provide module.register() hook to extend the loader;
                 // - does not provide vm.Module (without a flag) to load ES modules manually.
                 // Thus, crimes.
+                //
+                // Almost all of this can be deleted when VS Code ships Node v18.19.0 or later.
+                const globalThis: any = {
+                    importScripts: function() {
+                        // Needs to be `TypeError` for Pyodide loader to switch to `await import`.
+                        throw new TypeError(`importScripts() not implemented`);
+                    }
+                };
                 async function importModuleCriminally(url: URL | string): Promise<any> {
                     let code = await fetch(url).then((resp) => resp.text());
                     code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(url));
                     code = code.replace(/\bawait import\b/g, 'await _import');
                     code = code.replace(/\bexport const\b/g, 'exports.');
-                    code = code.replace(/\bexport\b/g, 'exports = ');
+                    code = code.replace(/\bexport\s*{([^}]+)}\s*;/g, (_match, args) =>
+                        `exports={${args.replace(/(\w+)\s+as\s+(\w+)/g, '$2:$1')}};`);
                     const script = new vm.Script(code, {
                         filename: url.toString()
                     });
-                    const context = {
+                    const context: any = {
+                        Object,
+                        String,
+                        Array,
                         Error,
+                        TypeError,
+                        Int8Array,
+                        Int16Array,
+                        Int32Array,
+                        BigInt64Array,
                         Uint8Array,
+                        Uint16Array,
+                        Uint32Array,
+                        BigUint64Array,
+                        Float32Array,
+                        Float64Array,
+                        WebAssembly,
                         TextDecoder,
                         TextEncoder,
                         URL,
+                        Blob,
                         fetch,
                         console,
                         performance,
+                        crypto,
+                        setTimeout,
+                        clearTimeout,
+                        setInterval,
+                        clearInterval,
+                        setImmediate,
+                        clearImmediate,
+                        btoa,
+                        atob,
+                        location: {
+                            href: url.toString(),
+                            toString() { return url.toString(); }
+                        },
                         _import: importModuleCriminally,
-                        exports: {}
+                        exports: {},
+                        globalThis,
                     };
+                    context.self = context;
+                    Object.setPrototypeOf(context, globalThis);
                     script.runInNewContext(context, { contextOrigin: url.toString() });
                     return context.exports;
                 }

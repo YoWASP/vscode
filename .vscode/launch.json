@@ -2,16 +2,33 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Run Extension",
+			"name": "Run in Extension Host",
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}"
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"${workspaceFolder}/test"
 			],
 			"outFiles": [
 				"${workspaceFolder}/out/node/*.js"
 			],
-			"preLaunchTask": "npm: esbuild:node:watch"
+			"preLaunchTask": {
+				"type": "npm",
+				"script": "esbuild:node:watch"
+			}
+		},
+		{
+			"name": "Run in Browser",
+			"type": "chrome",
+			"request": "attach",
+			"port": 9222,
+			"outFiles": [
+				"${workspaceFolder}/out/browser/*.js"
+			],
+			"preLaunchTask": {
+				"type": "npm",
+				"script": "browser"
+			}
 		}
 	]
 }

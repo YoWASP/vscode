@@ -10,8 +10,7 @@
 				"reveal": "never"
 			},
 			"group": {
-				"kind": "build",
-				"isDefault": true
+				"kind": "build"
 			}
 		},
 		{
@@ -23,9 +22,27 @@
 				"reveal": "never"
 			},
 			"group": {
-				"kind": "build",
-				"isDefault": true
+				"kind": "build"
 			}
+		},
+		{
+			"type": "npm",
+			"script": "browser",
+			"problemMatcher": [],
+			"isBackground": true,
+			"presentation": {
+				"reveal": "never"
+			},
+			"group": {
+				"kind": "none",
+				"isDefault": true
+			},
+			"dependsOn": [
+				{
+					"type": "npm",
+					"script": "esbuild:browser:watch"
+				}
+			]
 		}
 	]
 }

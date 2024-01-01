@@ -2,8 +2,9 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
-## 0.1.5
+## 0.2.0
 
+- Added Python language support.
 - Renamed `yowaspToolchain.baseURL` setting to `yowaspToolchain.bundleBaseURL`.
 
 ## 0.1.4
