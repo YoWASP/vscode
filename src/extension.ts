@@ -746,6 +746,15 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
     }
 
     private async extractOutputFiles(tree: Tree) {
+        function equalByteArrays(a: Uint8Array, b: Uint8Array) {
+            if (a.length !== b.length)
+                return false;
+            for (let i = 0; i < a.length; i++)
+                if (a[i] !== b[i])
+                    return false;
+            return true;
+        }
+
         async function collect(tree: Tree, prefix: string) {
             for (const [name, contents] of Object.entries(tree)) {
                 if (contents instanceof Uint8Array) {
@@ -760,9 +769,17 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
         const map = new Map();
         collect(tree, '/');
-        for (const [path, contents] of map) {
+        for (const [path, newContents] of map) {
             const fileUri = vscode.Uri.joinPath(this.workspaceFolder.uri, path);
-            await vscode.workspace.fs.writeFile(fileUri, contents);
+            try {
+                // Don't overwrite files if their content is identical. This isn't an optimization;
+                // writing to read-only files will fail, which can happen e.g. when a Python command
+                // is used on a workspace with a git repository in it.
+                const oldContents = await vscode.workspace.fs.readFile(fileUri);
+                if (equalByteArrays(oldContents, newContents))
+                    continue;
+            } catch {}
+            await vscode.workspace.fs.writeFile(fileUri, newContents);
             console.log(`[YoWASP toolchain] Wrote output file ${path} at ${fileUri}`);
         }
     }
