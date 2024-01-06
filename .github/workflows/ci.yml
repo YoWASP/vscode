@@ -34,7 +34,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: "github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')"
+    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     steps:
       - name: Set up Node
         uses: actions/setup-node@v3
@@ -46,7 +46,6 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: package
-          path: 'dist/'
       - name: Publish package
         run: vsce publish -i *.vsix
         env:
