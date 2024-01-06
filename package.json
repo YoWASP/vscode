@@ -125,6 +125,7 @@
         ]
     },
     "scripts": {
+        "tsc": "tsc -p .",
         "lint": "eslint src --ext ts",
         "esbuild": "npm run esbuild:browser && npm run esbuild:node",
         "esbuild:browser": "esbuild ./src/extension.ts --bundle --outdir=out/browser/ --sourcemap --external:vscode --format=cjs --platform=browser --define:USE_WEB_WORKERS=true",
