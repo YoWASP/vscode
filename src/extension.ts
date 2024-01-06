@@ -18,6 +18,9 @@ type Tree = {
     [name: string]: Tree | string | Uint8Array
 };
 
+type OutputStream =
+    (bytes: Uint8Array | null) => void;
+
 type USBDeviceFilter = {
     vendorId?: number,
     productId?: number,
@@ -29,9 +32,11 @@ type USBDeviceFilter = {
 
 type Command = {
     (args?: string[], files?: Tree, options?: {
+        stdout?: OutputStream | null,
+        stderr?: OutputStream | null,
         decodeASCII?: boolean,
-        print?: (chars: string) => void,
-        printLine?: (line: string) => void
+        // For compatibility with applications built with @yowasp/runtime <6.0.
+        printLine?: (line: string) => void,
     }): Promise<Tree>;
     requiresUSBDevice?: USBDeviceFilter[];
 };
@@ -94,7 +99,7 @@ interface PyodideLoadedMessage {
 
 interface TerminalOutputMessage {
     type: 'terminalOutput';
-    data: string;
+    data: Uint8Array | string | null;
 }
 
 interface RequestUSBDeviceMessage {
@@ -353,9 +358,12 @@ function workerEntryPoint(self: WorkerContext) {
 
         try {
             const filesOut = await command(args, filesIn, {
+                stdout: (bytes: Uint8Array | null) =>
+                    postMessage({ type: 'terminalOutput', data: bytes }),
+                stderr: (bytes: Uint8Array | null) =>
+                    postMessage({ type: 'terminalOutput', data: bytes }),
                 decodeASCII: false,
-                print: (chars: string) =>
-                    postMessage({ type: 'terminalOutput', data: chars }),
+                // For compatibility with applications built with @yowasp/runtime <6.0.
                 printLine: (line: string) =>
                     postMessage({ type: 'terminalOutput', data: `${line}\n` }),
             });
@@ -601,7 +609,13 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
                 break;
 
             case 'terminalOutput':
-                this.writeEmitter.fire(message.data.replace(/\n/g, '\r\n'));
+                let text = "";
+                if (typeof message.data === 'string') {
+                    text = message.data;
+                } else if (message.data instanceof Uint8Array) {
+                    text = new TextDecoder().decode(message.data);
+                }
+                this.writeEmitter.fire(text.replace(/\n/g, '\r\n'));
                 break;
 
             case 'requestUSBDevice':

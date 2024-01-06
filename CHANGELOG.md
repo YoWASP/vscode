@@ -4,7 +4,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 ## 0.2.2
 
-- None yet.
+- Updated the internal interface to the YoWASP runtime.
 
 ## 0.2.1
 
