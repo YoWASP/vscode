@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.2.3
+
+- Switched to an automated publishing workflow. All releases starting from this one are published from the continuous integration environment.
+
 ## 0.2.2
 
 - Updated the internal interface to the YoWASP runtime.
