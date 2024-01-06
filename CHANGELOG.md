@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.2.2
+
+- None yet.
+
 ## 0.2.1
 
 - Files are no longer overwritten if their contents matches exactly. This fixes a problem where read-only files in the workspace would cause any Python commands to fail.
