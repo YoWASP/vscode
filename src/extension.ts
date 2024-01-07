@@ -214,7 +214,8 @@ function workerEntryPoint(self: WorkerContext) {
             Exit: CommandExitConstructor
         };
         try {
-            const entryPointURL = new URL(packageJSON["exports"]["browser"], url);
+            const entryPoint = packageJSON.exports.browser ?? packageJSON.exports.default;
+            const entryPointURL = new URL(entryPoint, url);
             console.log(`[YoWASP toolchain] Importing bundle entry point from ${entryPointURL}`);
             bundleNS = await self.importModule(entryPointURL);
         } catch (e) {

@@ -84,6 +84,7 @@ if (USE_WEB_WORKERS) {
                 //
                 // Almost all of this can be deleted when VS Code ships Node v18.19.0 or later.
                 const globalThis: any = {
+                    fetch: fetch,
                     importScripts: function() {
                         // Needs to be `TypeError` for Pyodide loader to switch to `await import`.
                         throw new TypeError(`importScripts() not implemented`);
@@ -120,7 +121,6 @@ if (USE_WEB_WORKERS) {
                         TextEncoder,
                         URL,
                         Blob,
-                        fetch,
                         console,
                         performance,
                         crypto,
