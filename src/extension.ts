@@ -327,13 +327,18 @@ function workerEntryPoint(self: WorkerContext) {
             return;
         }
 
-        if (command.requiresUSBDevice) {
-            if (typeof navigator === 'undefined' || typeof navigator.usb === 'undefined') {
-                postDiagnostic(Severity.fatal,
-                    `The command '${argv0}' requires WebUSB, but it is not available.`);
-                return;
-            }
+        // Check if WebUSB is provided at all, either by the browser or via Node polyfill.
+        if (command.requiresUSBDevice && !self.supportsUSB) {
+            postDiagnostic(Severity.fatal,
+                `The command '${argv0}' requires WebUSB, but it is not available.`);
+            return;
+        }
 
+        // If WebUSB is provided by the browser, we need to request device permissions.
+        // If WebUSB is provided by the Node polyfill, no access control is performed.
+        // The Node polyfill is only available in the `importModule` context, not worker context.
+        if (command.requiresUSBDevice &&
+                typeof navigator !== 'undefined' && typeof navigator.usb !== 'undefined') {
             let filtersMatch = false;
             for (const usbDevice of await navigator.usb.getDevices()) {
                 if (command.requiresUSBDevice.length === 0) {

@@ -2,7 +2,7 @@
   "yowaspToolchain.bundles": [
     "@yowasp/yosys",
     "@yowasp/nextpnr-ecp5",
-    "@yowasp/openfpgaloader"
+    "@yowasp/openfpgaloader",
   ],
   "yowaspToolchain.pythonRequirements": [
     "amaranth"

@@ -86,3 +86,5 @@ Using a version other than the default one is not recommended because Pyodide do
 ## License
 
 The YoWASP extension is distributed under the terms of the [ISC license](LICENSE.txt).
+
+In addition, it includes a compiled Node extension that includes [libusb](https://github.com/libusb/libusb) and is thus subject to the [LGPL](https://github.com/libusb/libusb/blob/master/COPYING); this is used only on desktop VS Code. The compiled extension binaries are copied directly from the [usb](https://www.npmjs.com/package/usb) package.

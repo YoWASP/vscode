@@ -132,7 +132,8 @@
         "esbuild:browser:watch": "npm run esbuild:browser -- --watch",
         "esbuild:node": "esbuild ./src/extension.ts --bundle --outdir=out/node/ --sourcemap --external:vscode --format=cjs --platform=node --define:USE_WEB_WORKERS=false",
         "esbuild:node:watch": "npm run esbuild:node -- --watch",
-        "vscode:prepublish": "npm run esbuild:browser -- && npm run esbuild:node --",
+        "esbuild:nodeusb": "esbuild ./src/nodeUSB.ts --bundle --outfile=out/node/usb/bundle.js --sourcemap --format=cjs --platform=node --define:__dirname=__dirname_nodeUSB && cp -r node_modules/usb/prebuilds/ out/node/usb/",
+        "vscode:prepublish": "npm run esbuild:browser && npm run esbuild:node && npm run esbuild:nodeusb",
         "browser": "vscode-test-web --coi --browserOption=--remote-debugging-port=9222 --extensionDevelopmentPath=. test"
     },
     "devDependencies": {
@@ -143,6 +144,7 @@
         "@typescript-eslint/parser": "^6.13.1",
         "@typescript-eslint/eslint-plugin": "^6.13.1",
         "@vscode/test-web": "^0.0.50",
-        "esbuild": "^0.19.9"
+        "esbuild": "^0.19.9",
+        "usb": "^2.11.0"
     }
 }
