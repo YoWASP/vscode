@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.2.6
+
+- None yet.
+
 ## 0.2.5
 
 - Added support for running commands that use WebUSB on desktop VS Code.
