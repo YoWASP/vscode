@@ -43,7 +43,7 @@
                         "type": "string"
                     },
                     "default": [
-                        "@yowasp/yosys",
+                        "@yowasp/yosys@release",
                         "@yowasp/nextpnr-ice40",
                         "@yowasp/nextpnr-ecp5",
                         "@yowasp/nextpnr-machxo2",

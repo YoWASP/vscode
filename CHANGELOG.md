@@ -4,7 +4,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 ## 0.2.6
 
-- None yet.
+- Use release version of Yosys instead of latest build by default.
 
 ## 0.2.5
 
