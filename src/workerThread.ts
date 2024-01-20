@@ -159,6 +159,7 @@ if (USE_WEB_WORKERS) {
                     let code = await fetch(url).then((resp) => resp.text());
                     code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(url));
                     code = code.replace(/\bawait import\b/g, 'await _import');
+                    code = code.replace(/\(\) => import/g, '() => _import');
                     code = code.replace(/\bexport const\b/g, 'exports.');
                     code = code.replace(/\bexport\s*{([^}]+)}\s*;/g, (_match, args) =>
                         `exports={${args.replace(/(\w+)\s+as\s+(\w+)/g, '$2:$1')}};`);
@@ -170,7 +171,7 @@ if (USE_WEB_WORKERS) {
                             href: url.toString(),
                             toString() { return url.toString(); }
                         },
-                        _import: importModuleCriminally,
+                        _import: (innerURL: string) => importModuleCriminally(new URL(innerURL, url)),
                         exports: {},
                         globalThis,
                     };
