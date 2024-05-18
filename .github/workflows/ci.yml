@@ -11,9 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: v20.x
       - name: Install dependencies
@@ -27,7 +27,7 @@ jobs:
       - name: Package extension
         run: npm exec vsce package
       - name: Upload package artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: package
           path: '*.vsix'
@@ -37,13 +37,13 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     steps:
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: v20.x
       - name: Install VSCE
         run: npm install -g @vscode/vsce
       - name: Download package artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: package
       - name: Publish package
