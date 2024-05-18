@@ -5,6 +5,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 ## 0.2.7
 
 - Use release version of nextpnr instead of latest build by default.
+- Added default bundle: [`@spade-lang/spade`](https://spade-lang.org/).
 
 ## 0.2.6
 

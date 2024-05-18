@@ -53,6 +53,7 @@ By default, this extension downloads the latest version of each tool (which can 
 {
     "yowaspToolchain.bundleBaseURL": "https://cdn.jsdelivr.net/npm/",
     "yowaspToolchain.bundles": [
+        "@spade-lang/spade",
         "@yowasp/yosys@release",
         "@yowasp/nextpnr-ice40@release",
         "@yowasp/nextpnr-ecp5@release"

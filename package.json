@@ -43,6 +43,7 @@
                         "type": "string"
                     },
                     "default": [
+                        "@spade-lang/spade",
                         "@yowasp/yosys@release",
                         "@yowasp/nextpnr-ice40@release",
                         "@yowasp/nextpnr-ecp5@release",
