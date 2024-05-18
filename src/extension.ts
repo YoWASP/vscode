@@ -445,6 +445,7 @@ function workerEntryPoint(self: WorkerContext) {
             } else {
                 pyodide = await preparePyodide(args);
                 console.log(`[YoWASP Toolchain] Running Python file '${args[0]}'...`);
+                // This could be read from `pyodide.FS`, but error handling gets really weird.
                 const pyArgv0 = `__import__("sys").argv[0]`;
                 const pyReadFile = `(lambda f: (f.read(), f.close()))(open(${pyArgv0}))[0]`;
                 const pyLoader = `exec(compile(${pyReadFile}, ${pyArgv0}, 'exec'))`;
