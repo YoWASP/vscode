@@ -54,10 +54,10 @@ By default, this extension downloads the latest version of each tool (which can 
     "yowaspToolchain.bundleBaseURL": "https://cdn.jsdelivr.net/npm/",
     "yowaspToolchain.bundles": [
         "@yowasp/yosys@release",
-        "@yowasp/nextpnr-ice40",
-        "@yowasp/nextpnr-ecp5"
-        "@yowasp/nextpnr-machxo2",
-        "@yowasp/nextpnr-nexus",
+        "@yowasp/nextpnr-ice40@release",
+        "@yowasp/nextpnr-ecp5@release"
+        "@yowasp/nextpnr-machxo2@release",
+        "@yowasp/nextpnr-nexus@release",
         "@yowasp/openfpgaloader"
     ]
 }

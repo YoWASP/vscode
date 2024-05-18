@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.2.7
+
+- Use release version of nextpnr instead of latest build by default.
+
 ## 0.2.6
 
 - Use release version of Yosys instead of latest build by default.
