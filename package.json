@@ -83,20 +83,21 @@
         },
         "commands": [
             {
+                "command": "yowasp.toolchain.runCommand",
+                "category": "YoWASP Toolchain",
+                "title": "Run Command..."
+            },
+            {
                 "command": "yowasp.toolchain.build",
                 "category": "YoWASP Toolchain",
                 "title": "Build...",
                 "enablement": "config.yowaspToolchain.buildCommands && config.yowaspToolchain.buildCommands != []"
             },
             {
-                "command": "yowasp.toolchain.runCommand",
-                "category": "YoWASP Toolchain",
-                "title": "Run Command..."
-            },
-            {
                 "command": "yowasp.toolchain.requestUSBDevice",
                 "category": "YoWASP Toolchain",
-                "title": "Connect USB Device..."
+                "title": "Connect USB Device...",
+                "enablement": "isWeb"
             }
         ],
         "keybindings": [
@@ -106,14 +107,6 @@
                 "mac": "shift+cmd+b"
             }
         ],
-        "menus": {
-            "commandPalette": [
-                {
-                    "command": "yowasp.toolchain.requestUSBDevice",
-                    "when": "isWeb"
-                }
-            ]
-        },
         "taskDefinitions": [
             {
                 "type": "yowasp",
