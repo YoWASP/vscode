@@ -76,6 +76,7 @@
                         "minItems": 1
                     },
                     "minItems": 1,
+                    "default": [],
                     "markdownDescription": "The sequence of commands executed by the \"YoWASP Toolchain: Build...\" command.\n\nEach command is an array where the first element specifies the command to run, and the rest specify its arguments. Input or output files **must appear as their own argument** and not be concatenated with an option.\n\nE.g.:\n```\n[\n  [\"yosys\", \"top.v\", \"-p\", \"synth_ice40\", \"-o\", \"top.json\"],\n  [\"nextpnr-ice40\", \"--hx8k\", \"--package\", \"ct256\", \"--json\", \"top.json\", \"--asc\", \"top.asc\"]\n]\n```"
                 }
             }
@@ -84,7 +85,8 @@
             {
                 "command": "yowasp.toolchain.build",
                 "category": "YoWASP Toolchain",
-                "title": "Build..."
+                "title": "Build...",
+                "enablement": "config.yowaspToolchain.buildCommands && config.yowaspToolchain.buildCommands != []"
             },
             {
                 "command": "yowasp.toolchain.runCommand",
@@ -95,6 +97,13 @@
                 "command": "yowasp.toolchain.requestUSBDevice",
                 "category": "YoWASP Toolchain",
                 "title": "Connect USB Device..."
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "yowasp.toolchain.build",
+                "key": "ctrl+shift+b",
+                "mac": "shift+cmd+b"
             }
         ],
         "menus": {

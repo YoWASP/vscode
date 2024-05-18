@@ -6,6 +6,8 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 - Use release version of nextpnr instead of latest build by default.
 - Added default bundle: [`@spade-lang/spade`](https://spade-lang.org/).
+- The "Build..." command is now bound to <kbd>Shift</kbd>+<kbd>Ctrl</kbd>+<kbd>B</kbd>.
+- The "Build..." command is now conditionally enabled if `yowaspToolchain.buildCommands` setting is present.
 
 ## 0.2.6
 
