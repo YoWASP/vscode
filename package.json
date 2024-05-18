@@ -138,7 +138,7 @@
         "esbuild:browser:watch": "npm run esbuild:browser -- --watch",
         "esbuild:node": "esbuild ./src/extension.ts --bundle --outdir=out/node/ --sourcemap --external:vscode --format=cjs --platform=node --define:USE_WEB_WORKERS=false",
         "esbuild:node:watch": "npm run esbuild:node -- --watch",
-        "esbuild:nodeusb": "esbuild ./src/nodeUSB.ts --bundle --outfile=out/node/usb/bundle.js --sourcemap --format=cjs --platform=node --define:__dirname=__dirname_nodeUSB && cp -r node_modules/usb/prebuilds/ out/node/usb/",
+        "esbuild:nodeusb": "esbuild ./src/nodeUSB.ts --bundle --outfile=out/node/usb/bundle.js --sourcemap --format=cjs --platform=node --define:__dirname=__dirname_nodeUSB && node -e \"const { cpSync } = require('node:fs'); cpSync('node_modules/usb/prebuilds/', 'out/node/usb/prebuilds/', { recursive: true });\"",
         "vscode:prepublish": "npm run esbuild:browser && npm run esbuild:node && npm run esbuild:nodeusb",
         "browser": "vscode-test-web --coi --browserOption=--remote-debugging-port=9222 --extensionDevelopmentPath=. test"
     },
