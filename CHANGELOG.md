@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.3.1
+
+- None yet.
+
 ## 0.3.0
 
 - The entire workspace folder is now provided as an input to all commands, not just to Python commands. This change was made at the request of the Spade project.
