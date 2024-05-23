@@ -679,7 +679,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         this.postMessage({
             type: 'runCommand',
             command: this.command,
-            files: await this.collectInputFiles(this.command)
+            files: await this.collectInputFiles()
         });
     }
 
@@ -703,49 +703,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         throw new Error(`Only workspaces with a single root folder are supported`);
     }
 
-    private async collectInputFiles(commandLine: CommandLine) {
-        switch (classifyCommandLine(commandLine)) {
-            case CommandType.Bundle:
-                return this.collectInputFilesForBundle(commandLine);
-            case CommandType.Python:
-                return this.collectInputFilesForPython();
-        }
-    }
-
-    private async collectInputFilesForBundle(commandLine: CommandLine) {
-        const files: Tree = {};
-        for (const arg of commandLine.slice(1)) {
-            const fileUri = vscode.Uri.joinPath(this.workspaceFolder.uri, arg);
-            let data;
-            try {
-                data = new Uint8Array(await vscode.workspace.fs.readFile(fileUri));
-                console.log(`[YoWASP toolchain] Read input file ${arg} at ${fileUri}`);
-            } catch (e) {
-                continue;
-            }
-            let segmentIdx = -1;
-            let subtree = files;
-            do {
-                const nextSegmentIdx = arg.indexOf('/', segmentIdx + 1);
-                const segment = nextSegmentIdx === -1
-                    ? arg.substring(segmentIdx + 1)
-                    : arg.substring(segmentIdx + 1, nextSegmentIdx);
-                if (nextSegmentIdx === -1) {
-                    subtree[segment] = data;
-                } else if (segment === '') {
-                    /* skip segment */
-                } else {
-                    subtree[segment] ??= {};
-                    // @ts-ignore
-                    subtree = subtree[segment];
-                }
-                segmentIdx = nextSegmentIdx;
-            } while (segmentIdx !== -1);
-        }
-        return files;
-    }
-
-    private async collectInputFilesForPython() {
+    private async collectInputFiles() {
         async function collect(uri: vscode.Uri) {
             const tree: Tree = {};
             for (const [entryName, fileType] of await vscode.workspace.fs.readDirectory(uri)) {
