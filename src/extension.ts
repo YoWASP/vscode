@@ -709,13 +709,15 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
             for (const [entryName, fileType] of await vscode.workspace.fs.readDirectory(uri)) {
                 const entryUri = vscode.Uri.joinPath(uri, entryName);
                 if (fileType & vscode.FileType.Directory) {
+                    console.log(`[YoWASP toolchain] Collecting input directory at ${entryUri}`);
                     tree[entryName] = await collect(entryUri);
-                    console.log(`[YoWASP toolchain] Collected input directory at ${entryUri}`);
                 } else if (fileType & vscode.FileType.File) {
+                    console.log(`[YoWASP toolchain] Reading input file at ${entryUri}`);
                     tree[entryName] = await vscode.workspace.fs.readFile(entryUri);
-                    console.log(`[YoWASP toolchain] Read input file at ${entryUri}`);
+                } else if (fileType & vscode.FileType.SymbolicLink) {
+                    console.log(`[YoWASP toolchain] Ignoring broken symbolic link at ${entryUri}`);
                 } else {
-                    throw new Error('what');
+                    console.log(`[YoWASP toolchain] Ignoring unknown directory entry at ${entryUri}`);
                 }
             }
             return tree;
