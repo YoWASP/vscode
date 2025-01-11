@@ -155,6 +155,14 @@ if (USE_WEB_WORKERS) {
                 // Thus, crimes.
                 //
                 // Almost all of this can be deleted when VS Code ships Node v18.19.0 or later.
+                //
+                // Update (2025-01-11): VS Code ships Node v20.18.0 and this code still cannot
+                // be removed because `importModuleDynamically` is feature-gated behind a flag
+                // (`--experimental-vm-modules`) that VS Code doesn't pass.
+                //
+                // I could use `require('node:module').register()` but this will enable all
+                // extensions within the same extension host to import anything they want from
+                // any https:// URL, which seems sketchy at best. Crimes continue.
                 async function importModuleCriminally(url: URL | string): Promise<any> {
                     let code = await fetch(url).then((resp) => resp.text());
                     code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(url));
