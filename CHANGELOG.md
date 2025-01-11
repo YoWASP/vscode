@@ -2,6 +2,10 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
+## 0.4.0
+
+- None yet.
+
 ## 0.3.1
 
 - Fixed a crash on encountering a broken symbolic link in the workspace director.
