@@ -4,7 +4,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 ## 0.4.0
 
-- None yet.
+- Fixed compatibility with `@yowasp/nextpnr-himabechel-gowin`.
 
 ## 0.3.1
 

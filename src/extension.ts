@@ -35,6 +35,7 @@ type Command = {
         stdout?: OutputStream | null,
         stderr?: OutputStream | null,
         decodeASCII?: boolean,
+        loadPyodide?: (options: any) => Promise<any>,
         // For compatibility with applications built with @yowasp/runtime <6.0.
         printLine?: (line: string) => void,
     }): Promise<Tree>;
@@ -60,6 +61,10 @@ interface LoadBundlesMessage {
 interface LoadPyodideMessage {
     type: 'loadPyodide';
     url: string;
+}
+
+interface ConfigurePyodideMessage {
+    type: 'configurePyodide';
     packages: string[];
 }
 
@@ -120,6 +125,7 @@ interface CommandDoneMessage {
 type HostToWorkerMessage =
     LoadBundlesMessage |
     LoadPyodideMessage |
+    ConfigurePyodideMessage |
     PrepareCommandMessage |
     RunCommandMessage |
     USBDeviceRequestedMessage;
@@ -248,35 +254,25 @@ function workerEntryPoint(self: WorkerContext) {
         });
     }
 
-    let instantiatePyodide: null | ((homeDir: string, args: string[]) => Promise<{
-        FS: any,
-        loadPackage(names: string | string[]): Promise<void>,
-        pyimport(mod_name: string): any,
-        runPython(code: string, options: { filename?: string }): any,
-        runPythonAsync(code: string, options: { filename?: string }): Promise<any>,
-        ffi: {
-            PythonError: ErrorConstructor,
-            JsException: ErrorConstructor,
-        },
-    }>) = null;
+    let pyodideIndexURL: null | URL = null;
+    let pyodideNS: null | {
+        loadPyodide(options: {
+            indexURL?: URL | string,
+            args?: string[],
+            env?: {[key: string]: string},
+            jsglobals?: any,
+            packages?: string[],
+            stdin?: () => string | undefined,
+            stdout?: (line: string) => void,
+            stderr?: (line: string) => void,
+        }): Promise<any>;
+        version: string;
+    } = null;
     let pythonRequirements: string[] = [];
 
     async function loadPyodide(message: LoadPyodideMessage) {
-        let pyodideNS: {
-            loadPyodide(options: {
-                indexURL?: URL | string,
-                args?: string[],
-                env?: {[key: string]: string},
-                jsglobals?: any,
-                packages?: string[],
-                stdin?: () => string | undefined,
-                stdout?: (line: string) => void,
-                stderr?: (line: string) => void,
-            }): Promise<any>;
-            version: string;
-        };
-        const indexURL = new URL('./full/', message.url);
-        const entryPointURL = new URL('./pyodide.mjs', indexURL);
+        pyodideIndexURL = new URL('./full/', message.url);
+        const entryPointURL = new URL('./pyodide.mjs', pyodideIndexURL);
         try {
             console.log(`[YoWASP toolchain] Importing Pyodide entry point from ${entryPointURL}`);
             pyodideNS = await self.importModule(entryPointURL);
@@ -285,23 +281,9 @@ function workerEntryPoint(self: WorkerContext) {
                 `Cannot import Pyodide entry point from ${entryPointURL}: ${e}.`);
             return;
         }
-        instantiatePyodide = async (homeDir, args) => await pyodideNS.loadPyodide({
-            indexURL,
-            args,
-            env: { HOME: homeDir },
-            jsglobals: {
-                Object,
-                fetch: fetch.bind(globalThis),
-                setTimeout: setTimeout.bind(globalThis),
-                clearTimeout: clearTimeout.bind(globalThis),
-            },
-            stdout: (line: string) => postMessage({ type: 'terminalOutput', data: `${line}\n` }),
-            stderr: (line: string) => postMessage({ type: 'terminalOutput', data: `${line}\n` }),
-        });
-        pythonRequirements = message.packages;
         postMessage({
             type: 'pyodideLoaded',
-            version: pyodideNS.version,
+            version: pyodideNS!.version,
         });
     }
 
@@ -312,7 +294,9 @@ function workerEntryPoint(self: WorkerContext) {
         // ignore all errors.
         if (command) {
             console.log(`[YoWASP toolchain] Preloading resources for command '${message.name}'`);
-            command().then();
+            command(undefined, undefined, {
+                loadPyodide: pyodideNS?.loadPyodide,
+            }).then();
         }
     }
 
@@ -364,6 +348,7 @@ function workerEntryPoint(self: WorkerContext) {
 
         try {
             const filesOut = await command(args, filesIn, {
+                loadPyodide: pyodideNS?.loadPyodide,
                 stdout: (bytes: Uint8Array | null) =>
                     postMessage({ type: 'terminalOutput', data: bytes }),
                 stderr: (bytes: Uint8Array | null) =>
@@ -425,7 +410,18 @@ function workerEntryPoint(self: WorkerContext) {
         let PythonError: ErrorConstructor | undefined;
         async function preparePyodide(args: string[]) {
             console.log(`[YoWASP Toolchain] Instantiating Pyodide...`);
-            const pyodide = await instantiatePyodide!(homeDir, ['--', ...args]);
+            const pyodide = await pyodideNS!.loadPyodide({
+                args: ['--', ...args],
+                env: { HOME: homeDir },
+                jsglobals: {
+                    Object,
+                    fetch: fetch.bind(globalThis),
+                    setTimeout: setTimeout.bind(globalThis),
+                    clearTimeout: clearTimeout.bind(globalThis),
+                },
+                stdout: (line: string) => postMessage({ type: 'terminalOutput', data: `${line}\n` }),
+                stderr: (line: string) => postMessage({ type: 'terminalOutput', data: `${line}\n` }),
+            });
             PythonError = pyodide.ffi.PythonError;
             writeTreeToFS(pyodide.FS, filesIn, `${homeDir}/`);
             // Install packages after writing to filesystem. This is done after writing files to
@@ -455,6 +451,7 @@ function workerEntryPoint(self: WorkerContext) {
             postMessage({ type: 'commandDone', code: 0, files: filesOut });
         } catch(e) {
             if (pyodide !== undefined && (e instanceof pyodide.ffi.PythonError)) {
+                // @ts-expect-error
                 postMessage({ type: 'terminalOutput', data: e.message });
                 const filesOut = readTreeFromFS(pyodide.FS, `${homeDir}/`);
                 postMessage({ type: 'commandDone', code: 1, files: filesOut });
@@ -484,6 +481,9 @@ function workerEntryPoint(self: WorkerContext) {
                 break;
             case 'loadPyodide':
                 loadPyodide(message);
+                break;
+            case 'configurePyodide':
+                pythonRequirements = message.packages;
                 break;
             case 'prepareCommand':
                 prepareCommand(message);
@@ -556,6 +556,15 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
 
         this.printSystemMessage(`Loading tools...`);
         this.setStatus('Loading tools...');
+        // We support tools that use Pyodide internally (Apicula-based ones, primarily).
+        // These tools cannot load Pyodide on their own because of how they're currently shipped,
+        // and there's no way to detect that a tool needs Pyodide to be available. So, we always
+        // load it. This shouldn't be too resource-heavy since if Pyodide is not actually used,
+        // only a small loader file is imported.
+        this.postMessage({
+            type: 'loadPyodide',
+            url: pyodideURL,
+        });
         if (this.usesCommandType(CommandType.Bundle)) {
             this.postMessage({
                 type: 'loadBundles',
@@ -564,8 +573,7 @@ class WorkerPseudioterminal implements vscode.Pseudoterminal {
         }
         if (this.usesCommandType(CommandType.Python)) {
             this.postMessage({
-                type: 'loadPyodide',
-                url: pyodideURL,
+                type: 'configurePyodide',
                 packages: configuration.pythonRequirements
             });
         }

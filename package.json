@@ -17,7 +17,9 @@
     "engines": {
         "vscode": "^1.82.0"
     },
-    "extensionKind": ["ui"],
+    "extensionKind": [
+        "ui"
+    ],
     "categories": [
         "Programming Languages"
     ],
@@ -149,7 +151,7 @@
         "eslint": "^8.54.0",
         "@typescript-eslint/parser": "^6.13.1",
         "@typescript-eslint/eslint-plugin": "^6.13.1",
-        "@vscode/test-web": "^0.0.50",
+        "@vscode/test-web": "^0.0.71",
         "esbuild": "^0.19.9",
         "usb": "^2.11.0"
     }
