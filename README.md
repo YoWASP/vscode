@@ -59,7 +59,8 @@ By default, this extension downloads the latest version of each tool (which can 
         "@yowasp/nextpnr-ecp5@release"
         "@yowasp/nextpnr-machxo2@release",
         "@yowasp/nextpnr-nexus@release",
-        "@yowasp/openfpgaloader"
+        "@yowasp/openfpgaloader",
+        "@yowasp/clang
     ]
 }
 ```
