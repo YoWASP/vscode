@@ -127,6 +127,8 @@ if (USE_WEB_WORKERS) {
                     Promise,
                     URL,
                     Blob,
+                    Response,
+                    TransformStream,
                     fetch,
                     console,
                     performance,

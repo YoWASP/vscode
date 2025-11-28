@@ -2,9 +2,9 @@
 
 All notable changes to the YoWASP toolchain extension will be documented in this file.
 
-## 0.4.1
+## 0.4.2
 
-- None yet.
+- Fixed native VS Code compatibility with updated `@yowasp/*` packages.
 
 ## 0.4.1
 
