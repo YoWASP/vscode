@@ -4,7 +4,7 @@ All notable changes to the YoWASP toolchain extension will be documented in this
 
 ## 0.4.3
 
-- None yet.
+- Updated README.
 
 ## 0.4.2
 

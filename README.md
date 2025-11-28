@@ -4,6 +4,8 @@
 
 This extension runs the open source FPGA toolchain *anywhere you can run VS Code*. Windows, Linux, macOS, Chromebooks, corporate networks, even [vscode.dev][]! Add it to VS Code, wait a few minutes, and get a bitstream; simple as that.
 
+If you've enjoyed using this extension, please [tell me about it](mailto:whitequark@whitequark.org); the motivation for this work comes from hearing how useful it is to others.
+
 ![A short video demonstrating an inverter written in Verilog being synthesized, placed, routed, and converted to a bitstream for the iCE40 HX8K FPGA](demo.gif)
 
 [python]: https://python.org/
